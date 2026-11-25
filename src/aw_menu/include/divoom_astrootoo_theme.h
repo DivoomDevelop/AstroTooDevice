@@ -1,0 +1,305 @@
+#ifndef _divoom_astrootoo_theme_h_
+#define _divoom_astrootoo_theme_h_
+
+/*
+ * AstroToo Neutral Retro 设计 token（真源: AstroTooUI astrootooNeutralRetroTheme.ts）
+ * LVGL 侧统一使用本头文件，禁止页面内硬编码旧 FlowToo/TimesVibe 色值。
+ */
+
+/* 色彩 */
+#define DIVOOM_ASTRO_BG                 0xF0E4D2
+#define DIVOOM_ASTRO_BG_MUTED           0xEBE7E1
+#define DIVOOM_ASTRO_MODAL_BG           0xF5F2ED
+#define DIVOOM_ASTRO_MODAL_SHELL_BG     0xEBE7E1
+/* 列表/卡片项空闲底色，与 AstroTooUI golden 一致(#DDD8D0)，原 0xEBE7E1 偏浅 */
+#define DIVOOM_ASTRO_SURFACE_IDLE       0xDDD8D0
+#define DIVOOM_ASTRO_SURFACE_FOCUS      0xF8B634
+#define DIVOOM_ASTRO_INK                0x2C2A27
+#define DIVOOM_ASTRO_INK_MUTED          0x9A938B
+#define DIVOOM_ASTRO_STROKE             0xD4CEC6
+#define DIVOOM_ASTRO_FOCUS_HI           0xFCC96A
+#define DIVOOM_ASTRO_FOCUS_LO           0xD49220
+#define DIVOOM_ASTRO_TOGGLE_ON          0x7D9984
+#define DIVOOM_ASTRO_TAB_INK            0xB8B0A8
+#define DIVOOM_ASTRO_DANGER             0xC94A4A
+
+/* 圆角（px） */
+#define DIVOOM_ASTRO_RADIUS_SM          12
+#define DIVOOM_ASTRO_RADIUS_MD          20
+#define DIVOOM_ASTRO_RADIUS_LG          32
+#define DIVOOM_ASTRO_RADIUS_TAB_H2      8
+
+/* 480×480 布局 */
+#define DIVOOM_ASTRO_PAGE_PAD           16
+#define DIVOOM_ASTRO_HEADER_H           64
+#define DIVOOM_ASTRO_CONTENT_Y          DIVOOM_ASTRO_HEADER_H
+#define DIVOOM_ASTRO_CONTENT_H          (DIVOOM_SCREEN_HIGH - DIVOOM_ASTRO_CONTENT_Y)
+
+#define DIVOOM_ASTRO_REPEAT_ROW_W       448
+#define DIVOOM_ASTRO_REPEAT_ROW_H       56
+#define DIVOOM_ASTRO_REPEAT_ROW_GAP     6
+
+#define DIVOOM_ASTRO_CARD_ROW_W         444
+#define DIVOOM_ASTRO_CARD_ROW_H         72
+#define DIVOOM_ASTRO_CARD_ROW_GAP       8
+
+/* 列表行 sublevel chevron（真源 sublevel-chevron.svg / FlowtooSublevelChevronIcon 12×20） */
+#define DIVOOM_ASTRO_SUBLEVEL_CHEVRON_W   12
+#define DIVOOM_ASTRO_SUBLEVEL_CHEVRON_H   20
+
+/* 列表行 label 与相邻控件最小间距（marquee 裁切区须扣除 trailing + gap） */
+#define DIVOOM_ASTRO_LIST_LABEL_GAP         8
+/* 键值行左标题与右值之间间距（ 24px 字号下约 3 个半角字宽） */
+#define DIVOOM_ASTRO_LIST_KV_GAP            36
+#define DIVOOM_ASTRO_LIST_CHK_W             24
+#define DIVOOM_ASTRO_LIST_TOGGLE_W          44
+#define DIVOOM_ASTRO_LIST_CHEVRON_RESERVE   (DIVOOM_ASTRO_SUBLEVEL_CHEVRON_W + DIVOOM_ASTRO_LIST_LABEL_GAP)
+#define DIVOOM_ASTRO_LIST_CHK_RESERVE       (DIVOOM_ASTRO_LIST_CHK_W + DIVOOM_ASTRO_LIST_LABEL_GAP)
+/* 非 card 行：对勾 align RIGHT -N 时 trail_w = N + CHK_W（inset_r 取 N） */
+#define DIVOOM_ASTRO_LIST_CHK_TRAIL_ALIGN(align_r)  ((align_r) + DIVOOM_ASTRO_LIST_CHK_W)
+/* card 行（inset_r 已含 pad）：对勾 -8/-16 时 trail 须含 align 差值，等价 CHK_RESERVE */
+#define DIVOOM_ASTRO_LIST_CHK_TRAIL_CARD    DIVOOM_ASTRO_LIST_CHK_RESERVE
+#define DIVOOM_ASTRO_LIST_TOGGLE_RESERVE    (DIVOOM_ASTRO_LIST_TOGGLE_W + DIVOOM_ASTRO_LIST_LABEL_GAP)
+
+/* 主菜单三档轮播（真源 flowtooMainMenuCarouselLayout.ts + MainMenu.module.css） */
+#define DIVOOM_ASTRO_MAIN_MENU_HEADER_Y         64
+#define DIVOOM_ASTRO_MAIN_CAROUSEL_TOP_OFFSET   56   /* VIEWPORT_TOP 72 + preset offset -16 */
+#define DIVOOM_ASTRO_MAIN_VIEWPORT_TOP          (DIVOOM_ASTRO_MAIN_MENU_HEADER_Y + DIVOOM_ASTRO_MAIN_CAROUSEL_TOP_OFFSET)
+#define DIVOOM_ASTRO_MAIN_CARD_LG_W             118
+#define DIVOOM_ASTRO_MAIN_CARD_LG_H             200
+#define DIVOOM_ASTRO_MAIN_CARD_CY               (DIVOOM_ASTRO_MAIN_VIEWPORT_TOP + DIVOOM_ASTRO_MAIN_CARD_LG_H / 2)
+#define DIVOOM_ASTRO_MAIN_CAPTION_Y             (DIVOOM_ASTRO_MAIN_VIEWPORT_TOP + DIVOOM_ASTRO_MAIN_CARD_LG_H + 22)
+#define DIVOOM_ASTRO_MAIN_CAPTION_COLOR         0xFFD8AB
+#define DIVOOM_ASTRO_MAIN_NAV_HINT_X            128
+#define DIVOOM_ASTRO_MAIN_NAV_HINT_Y            414
+#define DIVOOM_ASTRO_MAIN_NAV_HINT_W            246
+#define DIVOOM_ASTRO_MAIN_NAV_HINT_H            30
+#define DIVOOM_ASTRO_MAIN_NAV_HINT_GAP          2
+#define DIVOOM_ASTRO_MAIN_NAV_HINT_COLOR        0xE9C5AE
+/* 主菜单顶栏（真源 FlowtooMainMenuHeader.module.css --ft-main-menu-header-fg） */
+#define DIVOOM_ASTRO_MAIN_MENU_HEADER_H         48
+#define DIVOOM_ASTRO_MAIN_MENU_HEADER_FG        DIVOOM_ASTRO_MAIN_NAV_HINT_COLOR
+#define DIVOOM_ASTRO_MAIN_MENU_HEADER_SOURCE_W  28
+#define DIVOOM_ASTRO_MAIN_MENU_HEADER_SOURCE_H  14
+#define DIVOOM_ASTRO_MAIN_MENU_HEADER_BATTERY_W 26
+#define DIVOOM_ASTRO_MAIN_MENU_HEADER_BATTERY_H DIVOOM_ASTRO_MAIN_MENU_HEADER_SOURCE_H
+#define DIVOOM_ASTRO_MAIN_MENU_HEADER_STATUS_GAP  12
+/* 真源 status-tws-l/r.svg 43×12，左簇音源右侧 gap 8 */
+#define DIVOOM_ASTRO_MAIN_MENU_HEADER_TWS_W     43
+#define DIVOOM_ASTRO_MAIN_MENU_HEADER_TWS_H     12
+#define DIVOOM_ASTRO_MAIN_MENU_HEADER_TWS_GAP   8
+#define DIVOOM_ASTRO_MAIN_MENU_HEADER_TWS_FG    DIVOOM_ASTRO_MAIN_NAV_HINT_COLOR
+#define DIVOOM_ASTRO_MAIN_MENU_HEADER_TWS_CH    0xF16F6F
+/* 真源 PixelText variant=status / FONT_PX.status */
+#define DIVOOM_ASTRO_MAIN_MENU_HEADER_TIME_FONT_PX 24
+#define DIVOOM_ASTRO_MAIN_NAV_CHEVRON_W         6
+#define DIVOOM_ASTRO_MAIN_NAV_CHEVRON_H         8
+
+/* 游戏中心等 legacy 单图 scale 轮播（非主菜单） */
+#define DIVOOM_ASTRO_CAROUSEL_TILE_W    262
+#define DIVOOM_ASTRO_CAROUSEL_TILE_H    222
+#define DIVOOM_ASTRO_CAROUSEL_PEEK_W    189
+#define DIVOOM_ASTRO_CAROUSEL_PEEK_H    160
+#define DIVOOM_ASTRO_CAROUSEL_CENTER_Y  97
+#define DIVOOM_ASTRO_CAROUSEL_PEEK_Y    (DIVOOM_ASTRO_CAROUSEL_CENTER_Y + 31)
+#define DIVOOM_ASTRO_CAROUSEL_CENTER_X  ((DIVOOM_SCREEN_WIDTH - DIVOOM_ASTRO_CAROUSEL_TILE_W) / 2)
+#define DIVOOM_ASTRO_CAROUSEL_PEEK_LX   8
+#define DIVOOM_ASTRO_CAROUSEL_PEEK_RX   (DIVOOM_SCREEN_WIDTH - DIVOOM_ASTRO_CAROUSEL_PEEK_W - 8)
+#define DIVOOM_ASTRO_CAROUSEL_PEEK_OPA  122
+
+#define DIVOOM_ASTRO_STATUS_BAR_H       36
+
+/* 顶栏通知条（480×480，FlowtooSystemNotice / at-top-stack） */
+#define DIVOOM_ASTRO_TOP_TOAST_X            32
+#define DIVOOM_ASTRO_TOP_TOAST_Y            28
+#define DIVOOM_ASTRO_TOP_TOAST_W            (DIVOOM_SCREEN_WIDTH - DIVOOM_ASTRO_TOP_TOAST_X * 2)
+#define DIVOOM_ASTRO_TOP_TOAST_H            72
+#define DIVOOM_ASTRO_TOP_TOAST_MIN_H        56
+#define DIVOOM_ASTRO_TOP_TOAST_PAD_X        14
+#define DIVOOM_ASTRO_TOP_TOAST_PAD_Y        10
+#define DIVOOM_ASTRO_TOP_TOAST_ICON         40
+#define DIVOOM_ASTRO_TOP_TOAST_GAP          10
+#define DIVOOM_ASTRO_TOP_TOAST_DISMISS_TICKS 13  /* 13 × 200ms ≈ 2.6s */
+
+/* 留言顶栏（480-main WarmMemoSavedModal · MasterGo 1482:71458 · 416×76） */
+#define DIVOOM_ASTRO_LEAVE_NOTICE_H         76
+#define DIVOOM_ASTRO_LEAVE_NOTICE_ICON_SZ   32
+#define DIVOOM_ASTRO_LEAVE_NOTICE_PAD_X     14
+#define DIVOOM_ASTRO_LEAVE_NOTICE_PAD_Y     6
+#define DIVOOM_ASTRO_LEAVE_NOTICE_COL_W     71
+#define DIVOOM_ASTRO_LEAVE_NOTICE_MSG_X     98
+#define DIVOOM_ASTRO_LEAVE_NOTICE_MSG_W     304
+#define DIVOOM_ASTRO_LEAVE_NOTICE_MSG_H     64
+#define DIVOOM_ASTRO_LEAVE_NOTICE_DUR_H     32
+
+/* 周年/社交提醒顶栏（720×216 → 480 宽） */
+#define DIVOOM_ASTRO_REMINDER_NOTICE_W      DIVOOM_ASTRO_TOP_TOAST_W
+#define DIVOOM_ASTRO_REMINDER_NOTICE_H      130
+#define DIVOOM_ASTRO_REMINDER_PAD           16
+#define DIVOOM_ASTRO_REMINDER_THUMB_SZ      83
+#define DIVOOM_ASTRO_REMINDER_THUMB_X       DIVOOM_ASTRO_REMINDER_PAD
+#define DIVOOM_ASTRO_REMINDER_THUMB_Y       ((DIVOOM_ASTRO_REMINDER_NOTICE_H - DIVOOM_ASTRO_REMINDER_THUMB_SZ) / 2)
+#define DIVOOM_ASTRO_REMINDER_TEXT_X        (DIVOOM_ASTRO_REMINDER_THUMB_X + DIVOOM_ASTRO_REMINDER_THUMB_SZ + 12)
+#define DIVOOM_ASTRO_REMINDER_TEXT_W        (DIVOOM_ASTRO_REMINDER_NOTICE_W - DIVOOM_ASTRO_REMINDER_TEXT_X - DIVOOM_ASTRO_REMINDER_PAD)
+#define DIVOOM_ASTRO_REMINDER_COUNTDOWN_Y   18
+#define DIVOOM_ASTRO_REMINDER_REMAIN_Y      46
+#define DIVOOM_ASTRO_REMINDER_SUBTITLE_Y    92
+#define DIVOOM_ASTRO_REMINDER_SOCIAL_TITLE_Y  28
+#define DIVOOM_ASTRO_REMINDER_SOCIAL_NUM_Y    50
+#define DIVOOM_ASTRO_REMINDER_GIF_SZ        56
+
+#define DIVOOM_ASTRO_LIST_PAD_X         ((DIVOOM_SCREEN_WIDTH - DIVOOM_ASTRO_REPEAT_ROW_W) / 2)
+
+/* 闹钟列表（真源: AlarmScreen.tsx + astrootooUiDesignSystemV1） */
+#define DIVOOM_ASTRO_HEADER_V1          0x243746
+#define DIVOOM_ASTRO_HEADER_INK         0xFFFFFF
+/* 子页顶栏背景（与系统设置 at_settings_header.png 一致，menu 26/） */
+#define DIVOOM_ASTRO_SUBPAGE_HEADER_UI_DIR    "26/"
+#define DIVOOM_ASTRO_SUBPAGE_HEADER_IMG       DIVOOM_ASTRO_SUBPAGE_HEADER_UI_DIR "at_settings_header.png"
+#define DIVOOM_ASTRO_ALARM_LIST_W       448
+#define DIVOOM_ASTRO_ALARM_TOGGLE_W     68
+#define DIVOOM_ASTRO_ALARM_COL_GAP      6
+#define DIVOOM_ASTRO_ALARM_BODY_W       (DIVOOM_ASTRO_ALARM_LIST_W - DIVOOM_ASTRO_ALARM_TOGGLE_W - DIVOOM_ASTRO_ALARM_COL_GAP)
+/* 列表字号：真源 FlowtooClockTimeLabel lead=32 · meridiem/menu=24 · RepeatSummary body=16 */
+#define DIVOOM_ASTRO_ALARM_TIME_FONT_PX     32
+#define DIVOOM_ASTRO_ALARM_MERIDIEM_FONT_PX 24
+#define DIVOOM_ASTRO_ALARM_REPEAT_FONT_PX   16
+#define DIVOOM_ASTRO_TIME_MERIDIEM_GAP      6   /* AlarmScreen.module.css .timeDisplay gap */
+/* repeat 区宽：body 374 − 左 12 − 时刻 ~90 − gap 8 − chevron 34 ≈ 230 */
+#define DIVOOM_ASTRO_ALARM_REPEAT_W       230
+#define DIVOOM_ASTRO_ALARM_ROW_H        72
+#define DIVOOM_ASTRO_ALARM_ROW_GAP      8
+#define DIVOOM_ASTRO_ALARM_LIST_TOP     (DIVOOM_ASTRO_HEADER_H + 4)
+
+/* 列表项边框（与 sleep 规范对齐语义，AstroToo 专用值） */
+#define DIVOOM_ASTRO_ITEM_BORDER_ACTIVE     DIVOOM_ASTRO_TAB_INK
+#define DIVOOM_ASTRO_ITEM_BORDER_INACTIVE   0xD4CEC6
+#define DIVOOM_ASTRO_ITEM_BORDER_W_ACTIVE   2
+#define DIVOOM_ASTRO_ITEM_BORDER_W_INACTIVE 2
+
+/* 暖纸大卡播放（真源 AstroTooUI sourceBluetoothPlaybackLayout.ts，屏 480×480） */
+#define DIVOOM_ASTRO_BT_CARD_W                  440
+#define DIVOOM_ASTRO_BT_CARD_H                  340
+#define DIVOOM_ASTRO_BT_CARD_CONTENT_Y          12  /* 屏 y76 = 64 顶栏 + 12 */
+#define DIVOOM_ASTRO_BT_CARD_PAD_X              16
+#define DIVOOM_ASTRO_BT_TITLE_CARD_Y            47  /* 屏 y163 */
+#define DIVOOM_ASTRO_BT_LYRIC_PLATE_CARD_Y      106 /* 屏 y182 */
+#define DIVOOM_ASTRO_BT_LYRIC_PLATE_H           72
+#define DIVOOM_ASTRO_BT_TRANSPORT_CARD_Y        210 /* 屏 y286 */
+#define DIVOOM_ASTRO_BT_TRANSPORT_SIDE_W        72
+#define DIVOOM_ASTRO_BT_TRANSPORT_CENTER_W      86
+#define DIVOOM_ASTRO_BT_TRANSPORT_H             72
+#define DIVOOM_ASTRO_BT_TRANSPORT_GAP           12
+#define DIVOOM_ASTRO_BT_MODE_BAR_CONTENT_Y      360 /* 屏 y424 */
+#define DIVOOM_ASTRO_BT_MODE_BAR_H              40
+#define DIVOOM_ASTRO_BT_MODE_BAR_BG             0xDFDCD6
+#define DIVOOM_ASTRO_BT_TRANSPORT_TAB_INK       0xB8B0A8
+
+/* 蓝牙 / UAC 共用外壳：面板高 260，三键在面板外 */
+#define DIVOOM_ASTRO_PLAYBACK_CARD_H            260
+#define DIVOOM_ASTRO_PLAYBACK_CARD_BORDER       0xDFDCD6
+#define DIVOOM_ASTRO_PLAYBACK_TRANSPORT_Y       284
+#define DIVOOM_ASTRO_PLAYBACK_TRANSPORT_H       64
+#define DIVOOM_ASTRO_PLAYBACK_TRANSPORT_GAP     12
+
+/* 蓝牙面板内：封面 160（真源 SourcePlaybackInfoPanel.module.css .cardCover / .playerCardWithCover）。
+ * 有歌词时歌名 24、歌词 28；无歌词时歌名 32。有封面不再画分隔线 */
+#define DIVOOM_ASTRO_BT_CARD_BG                 0xF8F4EE
+#define DIVOOM_ASTRO_BT_COVER_SZ                160
+#define DIVOOM_ASTRO_BT_COVER_Y                 12
+#define DIVOOM_ASTRO_BT_COVER_R                 16
+#define DIVOOM_ASTRO_BT_COVER_BG                0xA1A1A1
+#define DIVOOM_ASTRO_BT_SONG_Y                  174
+#define DIVOOM_ASTRO_BT_SONG_ONLY_Y             174
+#define DIVOOM_ASTRO_BT_DIVIDER_Y               92
+#define DIVOOM_ASTRO_BT_DIVIDER_W               24
+#define DIVOOM_ASTRO_BT_DIVIDER_H               4
+#define DIVOOM_ASTRO_BT_LYRIC_Y                 210
+#define DIVOOM_ASTRO_BT_LYRIC_H                 40
+
+/* UAC 已连接页 */
+#define DIVOOM_ASTRO_UAC_CARD_H                 DIVOOM_ASTRO_PLAYBACK_CARD_H
+#define DIVOOM_ASTRO_UAC_CARD_BG                0xF5EDE1
+#define DIVOOM_ASTRO_UAC_CARD_BORDER            DIVOOM_ASTRO_PLAYBACK_CARD_BORDER
+#define DIVOOM_ASTRO_UAC_HERO_Y                 16
+#define DIVOOM_ASTRO_UAC_HERO_H                 128
+#define DIVOOM_ASTRO_UAC_TITLE_Y                156 /* 16+128+12 */
+#define DIVOOM_ASTRO_UAC_BADGE_Y                210
+#define DIVOOM_ASTRO_UAC_BADGE_H                32
+#define DIVOOM_ASTRO_UAC_BADGE_MIN_W            160
+#define DIVOOM_ASTRO_UAC_BADGE_PAD_X            20
+#define DIVOOM_ASTRO_UAC_TRANSPORT_Y            DIVOOM_ASTRO_PLAYBACK_TRANSPORT_Y
+#define DIVOOM_ASTRO_UAC_TRANSPORT_H            DIVOOM_ASTRO_PLAYBACK_TRANSPORT_H
+#define DIVOOM_ASTRO_UAC_TRANSPORT_GAP          DIVOOM_ASTRO_PLAYBACK_TRANSPORT_GAP
+
+/* TF 播放信息白面板（卡内；左唱片空位 + 右歌名/进度/时间） */
+#define DIVOOM_ASTRO_TF_PANEL_X                 0
+#define DIVOOM_ASTRO_TF_PANEL_Y                 0
+#define DIVOOM_ASTRO_TF_PANEL_W                 440
+#define DIVOOM_ASTRO_TF_PANEL_H                 188
+#define DIVOOM_ASTRO_TF_PANEL_BG                0xF8F4EE
+#define DIVOOM_ASTRO_TF_PANEL_BORDER            0xDFDCD6
+#define DIVOOM_ASTRO_TF_VINYL_X                 20
+#define DIVOOM_ASTRO_TF_VINYL_Y                 26
+#define DIVOOM_ASTRO_TF_VINYL_PX                136
+#define DIVOOM_ASTRO_TF_INFO_X                  172 /* 20 + 136 + 16 */
+#define DIVOOM_ASTRO_TF_INFO_W                  248 /* 440 - 172 - 20 */
+#define DIVOOM_ASTRO_TF_TITLE_Y                 42
+#define DIVOOM_ASTRO_TF_PROGRESS_Y              94
+#define DIVOOM_ASTRO_TF_PROGRESS_H              12
+#define DIVOOM_ASTRO_TF_TIME_Y                  114
+#define DIVOOM_ASTRO_TF_BAR_X                   DIVOOM_ASTRO_TF_PANEL_X
+#define DIVOOM_ASTRO_TF_BAR_W                   DIVOOM_ASTRO_TF_PANEL_W
+/* 面板底 188 之后留 12；行高 64、行距 8；第二行底距 MODE 条 12 */
+#define DIVOOM_ASTRO_TF_TRANSPORT_CARD_Y        200
+#define DIVOOM_ASTRO_TF_TRANSPORT_BTN_W         120
+#define DIVOOM_ASTRO_TF_TRANSPORT_BTN_H         64
+#define DIVOOM_ASTRO_TF_TRANSPORT_GAP           8
+#define DIVOOM_ASTRO_TF_SECONDARY_CARD_Y        272
+/* TF 双行胶囊条 · sourceTfPlaybackBarControls / sourceTfPlaybackLayout */
+#define DIVOOM_ASTRO_TF_BAR_ACTIVE_BG           0xFFB833
+#define DIVOOM_ASTRO_TF_BAR_ICON_MUTED          0x988D68
+#define DIVOOM_ASTRO_TF_BAR_PAD_X               4
+#define DIVOOM_ASTRO_TF_TOAST_MS                2200
+#define DIVOOM_ASTRO_TF_SCAN_OVERLAY_BG         0x243746
+#define DIVOOM_ASTRO_TF_SCAN_OVERLAY_OPA        107 /* rgb(36,55,70) 42% */
+#define DIVOOM_ASTRO_TF_SCAN_CARD_W             280
+#define DIVOOM_ASTRO_TF_SCAN_CARD_H             140
+
+/* 闹钟响铃全屏 AlarmRingingOverlay · flowtooAlarmRingingLayout.ts */
+#define DIVOOM_ASTRO_ALARM_RING_BG                0x07121B
+#define DIVOOM_ASTRO_ALARM_RING_ACCENT              0xFF8400
+#define DIVOOM_ASTRO_ALARM_RING_MUTED               0x999999
+#define DIVOOM_ASTRO_ALARM_RING_FOCUS_FILL          0xFF8400
+#define DIVOOM_ASTRO_ALARM_RING_FOCUS_FILL_OPA      89  /* rgba(255,132,0,0.35) */
+#define DIVOOM_ASTRO_ALARM_RING_BTN_H               64
+#define DIVOOM_ASTRO_ALARM_RING_BTN_GAP             12
+#define DIVOOM_ASTRO_ALARM_RING_ACTIONS_BOTTOM      22
+#define DIVOOM_ASTRO_ALARM_RING_ACTIONS_INSET_X    40
+#define DIVOOM_ASTRO_ALARM_RING_BADGE_TOP_Y         50
+#define DIVOOM_ASTRO_ALARM_RING_BADGE_GAP           12
+#define DIVOOM_ASTRO_ALARM_RING_BADGE_ICON_W        42
+#define DIVOOM_ASTRO_ALARM_RING_BADGE_ICON_H        44
+#define DIVOOM_ASTRO_ALARM_RING_TIME_OFFSET_Y       54
+#define DIVOOM_ASTRO_ALARM_RING_UI_DIR              "63/"
+
+/* FlowtooConfirmModal 几何（flowtooModalLayout.ts） */
+#define DIVOOM_ASTRO_CONFIRM_MODAL_SHELL_W          408
+#define DIVOOM_ASTRO_CONFIRM_MODAL_MAX_H            412
+#define DIVOOM_ASTRO_CONFIRM_MODAL_BTN_MIN_H        56
+#define DIVOOM_ASTRO_CONFIRM_MODAL_BTN_PAD_Y        8
+#define DIVOOM_ASTRO_CONFIRM_MODAL_BTN_PAD_X        6
+#define DIVOOM_ASTRO_CONFIRM_MODAL_BTN_FONT         24
+/* fullBleed：480×480 暖色实底（flowtooModalLayout.ts FLOWTOO_MODAL_FULL_BLEED_*） */
+#define DIVOOM_ASTRO_CONFIRM_MODAL_FULL_BLEED_PAD_X           40
+#define DIVOOM_ASTRO_CONFIRM_MODAL_FULL_BLEED_ACTIONS_BOTTOM  52
+#define DIVOOM_ASTRO_CONFIRM_MODAL_FULL_BLEED_ACTIONS_GAP     16
+#define DIVOOM_ASTRO_CONFIRM_MODAL_FULL_BLEED_BODY_LINE_H     48
+#define DIVOOM_ASTRO_CONFIRM_MODAL_FULL_BLEED_BODY_GAP        12
+#define DIVOOM_ASTRO_CONFIRM_MODAL_FULL_BLEED_BODY_FONT       32
+#define DIVOOM_ASTRO_CONFIRM_MODAL_FULL_BLEED_CONTENT_GAP     14
+
+/* FlowtooAlertModal 单钮（flowtooModalLayout.ts modalBtnSingle max-width 240） */
+#define DIVOOM_ASTRO_ALERT_MODAL_BTN_SINGLE_W       240
+
+#endif

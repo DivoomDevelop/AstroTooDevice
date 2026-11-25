@@ -1,0 +1,1 @@
+LICHEE_BRANDY_DEFCONF:=sun252iw2p1_freertos_nor_defconfig

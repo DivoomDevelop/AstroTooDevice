@@ -1,0 +1,2 @@
+#define SDK_UTS_VERSION "Wed, 25 Nov 2026 10:34:30 +0800"
+#define SDK_COMPILE_TIME "10:34:30"

@@ -1,0 +1,33 @@
+#ifndef DIVOOM_SSL_CONFIG_H
+#define DIVOOM_SSL_CONFIG_H
+
+#include "divoom_paths.h"
+
+/* HTTPS 依赖 wolfSSL + libuhttpd；RTOS SHTTPD 当前仅 HTTP:9000 */
+#if defined(DIVOOM_HAVE_WOLFSSL) && !defined(DIVOOM_SIMULATOR)
+//#define DIVOOM_HTTPS_ENABLE
+#endif
+
+// SSL端口配置
+#define DVIOOM_HTTPS_SERVER_PORT 9443
+
+// SSL证书和密钥文件路径
+#define DVIOOM_SSL_CERT_FILE DIVOOM_SSL_CERT_FILE
+#define DVIOOM_SSL_KEY_FILE DIVOOM_SSL_KEY_FILE
+
+// SSL配置选项
+#define DVIOOM_SSL_VERIFY_PEER 0  // 是否验证客户端证书
+#define DVIOOM_SSL_VERIFY_HOST 0  // 是否验证主机名
+
+// SSL密码套件配置（简化版本）
+#define DVIOOM_SSL_CIPHER_LIST "ALL:!aNULL:!ADH:!eNULL:!LOW:!EXP:RC4+RSA:+HIGH:+MEDIUM"
+
+// SSL协议版本（使用默认值）
+#define DVIOOM_SSL_MIN_VERSION 0
+#define DVIOOM_SSL_MAX_VERSION 0
+
+// SSL会话缓存配置
+#define DVIOOM_SSL_SESSION_CACHE_SIZE 1024
+#define DVIOOM_SSL_SESSION_TIMEOUT 300
+
+#endif // DIVOOM_SSL_CONFIG_H 

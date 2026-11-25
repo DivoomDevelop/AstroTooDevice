@@ -1,0 +1,18 @@
+#ifndef _divoom_astrootoo_settings_wifi_h_
+#define _divoom_astrootoo_settings_wifi_h_
+
+#include "divoom_astrootoo_settings_internal.h"
+
+void divoom_astrootoo_settings_build_wifi(Pdivoom_astrootoo_settings_ctrl phandle);
+void divoom_astrootoo_settings_build_wifi_add(Pdivoom_astrootoo_settings_ctrl phandle);
+void divoom_astrootoo_settings_build_wifi_password(Pdivoom_astrootoo_settings_ctrl phandle);
+void divoom_astrootoo_settings_wifi_group_detach(Pdivoom_astrootoo_settings_ctrl phandle);
+void divoom_astrootoo_settings_wifi_group_bind(Pdivoom_astrootoo_settings_ctrl phandle,
+    lv_obj_t *focus_target);
+uint8 divoom_astrootoo_settings_wifi_request_app_pairing_prompt(void);
+#ifdef DIVOOM_SIMULATOR
+int divoom_astrootoo_settings_wifi_sim_app_pairing_prompt_is_open(void);
+#endif
+void divoom_astrootoo_settings_wifi_clean(Pdivoom_astrootoo_settings_ctrl phandle);
+
+#endif

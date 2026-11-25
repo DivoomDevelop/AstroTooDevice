@@ -1,0 +1,14 @@
+#ifndef _divoom_astrootoo_settings_slideshow_h_
+#define _divoom_astrootoo_settings_slideshow_h_
+
+#include "divoom_astrootoo_settings_internal.h"
+
+int divoom_astrootoo_settings_slideshow_is_page(divoom_astrootoo_settings_page_t page);
+void divoom_astrootoo_settings_slideshow_build(Pdivoom_astrootoo_settings_ctrl phandle);
+void divoom_astrootoo_settings_slideshow_group_bind(Pdivoom_astrootoo_settings_ctrl phandle,
+    lv_obj_t *focus_target);
+void divoom_astrootoo_settings_slideshow_group_detach(Pdivoom_astrootoo_settings_ctrl phandle);
+void divoom_astrootoo_settings_slideshow_save(Pdivoom_astrootoo_settings_ctrl phandle);
+void divoom_astrootoo_settings_slideshow_picker_apply(Pdivoom_astrootoo_settings_ctrl phandle, int pos);
+
+#endif

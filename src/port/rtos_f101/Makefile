@@ -1,0 +1,10 @@
+obj-y += divoom_port_os_rtos.o
+obj-y += divoom_port_fs_rtos.o
+obj-y += divoom_port_fs_check_rtos.o
+obj-y += divoom_port_hw_rtos.o
+obj-y += divoom_port_uart_rtos.o
+obj-y += ../common/divoom_port_fs_io.o
+obj-y += ../common/divoom_port_fs_tree.o
+obj-y += ../common/divoom_port_dir_checksum.o
+obj-y += ../common/divoom_port_fs_exec.o
+obj-y += ../common/divoom_port_time.o

@@ -1,0 +1,9 @@
+#ifndef _divoom_lvgl_white_noise_play_main_h_
+#define _divoom_lvgl_white_noise_play_main_h_
+
+void *divoom_lvgl_white_noise_play_main_init(void *user_data, int menu_id);
+void divoom_lvgl_white_noise_play_main_disp(void *handle, void *active_obj);
+void divoom_lvgl_white_noise_play_main_pause(void *handle);
+void divoom_lvgl_white_noise_play_main_exit(void *handle);
+
+#endif

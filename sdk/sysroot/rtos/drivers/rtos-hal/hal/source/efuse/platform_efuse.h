@@ -1,0 +1,165 @@
+/*
+* Copyright (c) 2019-2025 Allwinner Technology Co., Ltd. ALL rights reserved.
+*
+* Allwinner is a trademark of Allwinner Technology Co.,Ltd., registered in
+* the the People's Republic of China and other countries.
+* All Allwinner Technology Co.,Ltd. trademarks are used with permission.
+*
+* DISCLAIMER
+* THIRD PARTY LICENCES MAY BE REQUIRED TO IMPLEMENT THE SOLUTION/PRODUCT.
+* IF YOU NEED TO INTEGRATE THIRD PARTY’S TECHNOLOGY (SONY, DTS, DOLBY, AVS OR MPEGLA, ETC.)
+* IN ALLWINNERS’SDK OR PRODUCTS, YOU SHALL BE SOLELY RESPONSIBLE TO OBTAIN
+* ALL APPROPRIATELY REQUIRED THIRD PARTY LICENCES.
+* ALLWINNER SHALL HAVE NO WARRANTY, INDEMNITY OR OTHER OBLIGATIONS WITH RESPECT TO MATTERS
+* COVERED UNDER ANY REQUIRED THIRD PARTY LICENSE.
+* YOU ARE SOLELY RESPONSIBLE FOR YOUR USAGE OF THIRD PARTY’S TECHNOLOGY.
+*
+*
+* THIS SOFTWARE IS PROVIDED BY ALLWINNER"AS IS" AND TO THE MAXIMUM EXTENT
+* PERMITTED BY LAW, ALLWINNER EXPRESSLY DISCLAIMS ALL WARRANTIES OF ANY KIND,
+* WHETHER EXPRESS, IMPLIED OR STATUTORY, INCLUDING WITHOUT LIMITATION REGARDING
+* THE TITLE, NON-INFRINGEMENT, ACCURACY, CONDITION, COMPLETENESS, PERFORMANCE
+* OR MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+* IN NO EVENT SHALL ALLWINNER BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+* SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+* NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+* LOSS OF USE, DATA, OR PROFITS, OR BUSINESS INTERRUPTION)
+* HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+* STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+* ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
+* OF THE POSSIBILITY OF SUCH DAMAGE.
+*/
+
+#ifndef __EFUSE_PLATFORM_H__
+#define __EFUSE_PLATFORM_H__
+
+typedef  unsigned int uint;
+
+#define EFUSE_DEF_ITEM(name,offset,size_bits,rd_offset,burn_offset,acl) \
+{name,offset,size_bits,rd_offset,burn_offset,acl}
+
+
+#if defined(CONFIG_ARCH_SUN8IW19)
+#include "platform/efuse_sun8iw19.h"
+#elif defined(CONFIG_ARCH_SUN8IW18P1)
+#include "platform/efuse_sun8iw18.h"
+#elif (defined(CONFIG_ARCH_SUN8IW20) || defined(CONFIG_ARCH_SUN20IW1))
+#include "platform/efuse_sun8iw20.h"
+#elif defined(CONFIG_ARCH_SUN20IW2)
+#include "platform/efuse_sun20iw2.h"
+#elif defined(CONFIG_ARCH_SUN251IW1)
+#include "platform/efuse_sun251iw1.h"
+#elif defined(CONFIG_ARCH_SUN252IW2)
+#include "platform/efuse_sun252iw2.h"
+#endif
+
+/* Globel config area begin */
+//#define EFUSE_DBG_EN 1
+
+/* Efuse Mapping Table */
+#ifndef SID_CHIPID_SIZE
+#define SID_CHIPID_SIZE		(128)
+#endif
+
+#ifndef EFUSE_CHIPID
+#define EFUSE_CHIPID		(0x0)
+#endif
+
+#ifndef SCC_CHIPID_BURNED_FLAG
+#define SCC_CHIPID_BURNED_FLAG	(0)
+#endif
+
+#ifndef SID_THERMAL_SENSOR_SIZE
+#define SID_THERMAL_SENSOR_SIZE (64)
+#endif
+
+#ifndef SID_FT_ZONE_SIZE
+#define SID_FT_ZONE_SIZE	(128)
+#endif
+
+#ifndef SID_ROTPK_SIZE
+#define SID_ROTPK_SIZE		(256)
+#endif
+
+#ifndef SID_NV1_SIZE
+#define SID_NV1_SIZE		(32)
+#endif
+
+#ifndef	SID_PSENSOR_SIZE
+#define SID_PSENSOR_SIZE	(32)
+#endif
+
+#ifndef SID_SSK_SIZE
+#define SID_SSK_SIZE		(128)
+#endif
+
+#ifndef SID_OEM1_SIZE
+#define SID_OEM1_SIZE		(64)
+#endif
+
+#ifndef SID_OEM2_SIZE
+#define SID_OEM2_SIZE		(128)
+#endif
+
+#ifndef SID_OEM3_SIZE
+#define SID_OEM3_SIZE		(384)
+#endif
+
+#ifndef EFUSE_SECURE_BIT
+#define EFUSE_SECURE_BIT	(0)
+#endif
+
+/* SID Registers */
+#ifndef SID_PG_INDEX_OFFSET
+#define SID_PG_INDEX_OFFSET	16
+#endif
+
+#ifndef SID_PG_INDEX_MASK
+#define SID_PG_INDEX_MASK	(0x1ff << SID_PG_INDEX_OFFSET)
+#endif
+
+#ifndef SID_OP_LOCK_OFFSET
+#define SID_OP_LOCK_OFFSET	8
+#endif
+
+#ifndef SID_OP_LOCK_MASK
+#define SID_OP_LOCK_MASK	(0xff << SID_OP_LOCK_OFFSET)
+#endif
+
+#ifndef SID_PR_START_MASK
+#define SID_PR_START_MASK	0x3
+#endif
+
+#ifndef SID_READ_START
+#define SID_READ_START		0x2
+#endif
+
+#ifndef SID_PG_START
+#define SID_PG_START		0x1
+#endif
+
+#ifndef SID_PR_CTRL_MASK
+#define SID_PR_CTRL_MASK	(SID_PG_INDEX_MASK | SID_OP_LOCK_MASK | SID_PR_START_MASK)
+#endif
+
+#ifndef SID_PG_INDEX_ENABLE_MASK
+#define SID_PG_INDEX_ENABLE_MASK	(SID_PG_INDEX_MASK | SID_PR_START_MASK)
+#endif
+
+#ifndef SID_PG_START_ENABLE_MASK
+#define SID_PG_START_ENABLE_MASK	(SID_OP_LOCK_MASK | SID_PR_START_MASK)
+#endif
+
+#ifndef SID_PR_ADDR
+#define SID_PR_ADDR	SID_PRCTL
+#endif
+
+#ifndef SID_WRITE_OP_LOCK
+#define SID_WRITE_OP_LOCK	SID_OP_LOCK
+#endif
+
+#ifndef SID_READ_OP_LOCK
+#define SID_READ_OP_LOCK	SID_OP_LOCK
+#endif
+
+#endif

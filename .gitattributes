@@ -1,0 +1,5 @@
+/sdk/** -text
+/toolchain/** -text
+/sdk.lock -text
+/sdk/pack/template/data_UDISK.fex filter=lfs diff=lfs merge=lfs -text
+/sdk/pack/template/data_usr.fex filter=lfs diff=lfs merge=lfs -text

@@ -1,0 +1,46 @@
+{
+  "inputs": [
+    "{SDK}/lib/arch.a",
+    "{SDK}/lib/components.a",
+    "{SDK}/lib/drivers.a",
+    "{SDK}/lib/kernel.a",
+    "{APP_OBJECTS}",
+    "{SDK}/lib/projects_fixed_1.a"
+  ],
+  "flags": [
+    "-nostdlib",
+    "-Wl,--gc-sections",
+    "-mcmodel=medany",
+    "-mcpu=c907fdv-rv32",
+    "-Wl,--wrap=__retarget_lock_acquire_recursive",
+    "-Wl,--wrap=__retarget_lock_release_recursive",
+    "-nostartfiles",
+    "-nodefaultlibs",
+    "--specs=nano.specs"
+  ],
+  "vendor": [
+    "{SDK}/lib/vendor/00_libcedarc.a"
+  ],
+  "crash_build_id": true,
+  "objcopy_flags": [
+    "-g",
+    "-S",
+    "-O",
+    "binary",
+    "-R",
+    ".note",
+    "-R",
+    ".comment",
+    "-R",
+    "COMMON",
+    "-R",
+    ".ARM.attributes",
+    "-R",
+    ".en_frame",
+    "-R",
+    ".init",
+    "-R",
+    ".fini",
+    "--gap-fill=0x00"
+  ]
+}

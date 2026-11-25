@@ -1,0 +1,8 @@
+/build/
+/out/
+/verification/
+__pycache__/
+*.pyc
+*.tmp
+*.orig
+svn-commit.tmp*

@@ -1,0 +1,9 @@
+{
+  "target": "f101s3_astrotoo",
+  "storage": "480Mmmc",
+  "image_name": "rtos_freertos_f101s3_uart0_480Mmmc.img",
+  "load_address": 1073807360,
+  "read_buffer": 1082130432,
+  "uboot_heap_start": 1080393728,
+  "boot_partition_bytes": 6815744
+}
