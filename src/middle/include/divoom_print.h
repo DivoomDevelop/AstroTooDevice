@@ -16,6 +16,10 @@ void divoom_log_write(const char* tag, const char* fmt, ...);
 #define CONFIG_DIVOOM_LOG_LEVEL DIVOOM_LOG_LEVEL_DEBUG
 #endif
 
+#ifndef DIVOOM_APP_LOG_LEVEL
+#define DIVOOM_APP_LOG_LEVEL CONFIG_DIVOOM_LOG_LEVEL
+#endif
+
 #define DIVOOM_LOG_STATE_IMPL(fmt,...) do { \
         char tag[128]; \
         sprintf(tag, "%u:%s--%d:  ", \
@@ -25,7 +29,7 @@ void divoom_log_write(const char* tag, const char* fmt, ...);
         divoom_log_write(tag, fmt, ##__VA_ARGS__); \
     } while (0)
 
-#if defined(DIVOOM_APP_DEBUG_LOG) || CONFIG_DIVOOM_LOG_LEVEL >= DIVOOM_LOG_LEVEL_STATE
+#if DIVOOM_APP_LOG_LEVEL >= DIVOOM_LOG_LEVEL_STATE
 #define divoom_log_state(fmt,...) DIVOOM_LOG_STATE_IMPL(fmt, ##__VA_ARGS__)
 #else
 #define divoom_log_state(fmt,...) do { } while (0)
@@ -36,7 +40,7 @@ void divoom_log_write(const char* tag, const char* fmt, ...);
 
 #define dm_print printf 
 
-#if defined(DIVOOM_APP_DEBUG_LOG) || CONFIG_DIVOOM_LOG_LEVEL >= DIVOOM_LOG_LEVEL_DEBUG
+#if DIVOOM_APP_LOG_LEVEL >= DIVOOM_LOG_LEVEL_DEBUG
 #define divoom_debug(format,...) do { \
         printf("%s,LINE:%d:" format "\n", __func__, __LINE__, ##__VA_ARGS__); \
     } while (0)

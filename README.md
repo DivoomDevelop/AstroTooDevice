@@ -96,13 +96,14 @@ Add each new source file to `app_sources.txt` on its own line, using a path rela
 
 ### Package and flash with PhoenixSuit
 
-From the repository root in Linux or WSL 2, run the script to build and package the firmware directly.
+From the repository root in Linux or WSL 2, build and package the firmware in either mode.
 
 ```bash
-bash debug_gerate_firmware.sh --jobs 8
+bash gerate_firmware.sh --jobs 8        # Release firmware with application error logs
+bash debug_gerate_firmware.sh --jobs 8  # Firmware with application state and debug logs
 ```
 
-The flash image is written to `out/rtos_freertos_f101s3_uart0_480Mmmc.img` relative to the repository root. The script turns on application debug logs and writes the matching debugging artifacts to `out/rt_system_debug.zip`.
+Both scripts write the flash image to `out/rtos_freertos_f101s3_uart0_480Mmmc.img` and the matching symbol archive to `out/rt_system_debug.zip`. These paths are relative to the repository root. Each build replaces the previous outputs at those paths.
 
 On Windows, download and extract the [PhoenixSuit flashing tool](tools/phoenSuit.zip). Open PhoenixSuit and select `out/rtos_freertos_f101s3_uart0_480Mmmc.img` as the firmware image. Put the device into flash mode using its existing procedure, then start flashing in PhoenixSuit.
 

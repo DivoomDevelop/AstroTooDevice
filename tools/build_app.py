@@ -70,7 +70,7 @@ def run(cmd, log):
         raise RuntimeError(f"command failed ({result.returncode}); {log.relative_to(ROOT)}\n" + "\n".join(tail))
 
 
-def compile_app(recipes, expand, tc, jobs, rebuild, debug):
+def compile_app(recipes, expand, tc, jobs, rebuild, log_level):
     sources = [s.strip() for s in (ROOT / "app_sources.txt").read_text().splitlines()
                if s.strip() and not s.lstrip().startswith("#")]
     if len(sources) != len(set(sources)):
@@ -98,8 +98,8 @@ def compile_app(recipes, expand, tc, jobs, rebuild, debug):
         dep = obj.with_suffix(".d")
         state = obj.with_suffix(".json")
         flags = [expand(x) for x in recipe["flags"]]
-        if debug:
-            flags.append("-DDIVOOM_APP_DEBUG_LOG")
+        if log_level is not None:
+            flags.append(f"-DDIVOOM_APP_LOG_LEVEL={log_level}")
         cmd = [str(tc / "bin" / ("riscv64-unknown-elf-" + recipe["compiler"])), *flags,
                "-MMD", "-MF", str(dep), "-MT", str(obj), "-c", str(src), "-o", str(obj)]
         signature = hashlib.sha256(json.dumps(cmd).encode()).hexdigest()
@@ -202,10 +202,14 @@ def main():
     ap.add_argument("--no-pack", action="store_true", help="build ELF/BIN only")
     ap.add_argument("--pack-only", action="store_true", help="pack an existing out/rt_system.bin")
     ap.add_argument("--clean", action="store_true", help="remove only this project's generated build and out directories")
-    ap.add_argument("--debug", action="store_true", help="enable application debug logs and package symbols")
+    modes = ap.add_mutually_exclusive_group()
+    modes.add_argument("--debug", dest="log_level", action="store_const", const="DIVOOM_LOG_LEVEL_DEBUG",
+                       help="enable application debug logs and package symbols")
+    modes.add_argument("--release", dest="log_level", action="store_const", const="DIVOOM_LOG_LEVEL_ERROR",
+                       help="disable application state and debug logs and package symbols")
     args = ap.parse_args()
-    if args.debug and (args.clean or args.verify_only or args.no_pack or args.pack_only):
-        ap.error("--debug requires a full build and package")
+    if args.log_level is not None and (args.clean or args.verify_only or args.no_pack or args.pack_only):
+        ap.error("firmware modes require a full build and package")
     if args.clean:
         for p in (BUILD, OUT):
             if p.exists():
@@ -236,7 +240,7 @@ def main():
     compiled = 0
     if not args.pack_only:
         objects, compiled = compile_app(load(SDK / "config/recipes.json"), expand, tc,
-                                        args.jobs, args.rebuild, args.debug)
+                                        args.jobs, args.rebuild, args.log_level)
         link = load(SDK / "config/link.json")
         source_names = [s.strip() for s in (ROOT / "app_sources.txt").read_text().splitlines()
                         if s.strip() and not s.lstrip().startswith("#")]
@@ -264,7 +268,7 @@ def main():
     artifacts = [binary]
     if not args.no_pack:
         artifacts += pack(binary, board)
-    if args.debug:
+    if args.log_level is not None:
         artifacts.append(pack_debug(elf, binary, OUT / board["image_name"]))
     report = {"sdk_id": manifest["sdk_id"], "compiled_units": compiled, "elapsed_seconds": round(time.time() - started, 2),
               "artifacts": {p.relative_to(ROOT).as_posix(): {"bytes": p.stat().st_size, "sha256": digest(p)} for p in artifacts},
