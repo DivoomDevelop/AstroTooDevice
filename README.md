@@ -1,25 +1,25 @@
-# AstroToo 应用工程与固定 SDK
+# AstroToo Application and Fixed SDK
 
-本工程用于修改应用源码、与预编译底层链接并生成完整烧录包。原 AstroToo 工程是导出时的只读输入，日常构建不需要它，也不会调用它的 Makefile、配置或打包脚本。
+Use this project to modify the AstroToo application, link it against the prebuilt platform SDK, and produce a complete flash image. The original AstroToo project serves as a read-only input during SDK export. The build in this repository uses its own scripts and configuration and can run independently of the original project.
 
-开发者与 AI 工具请先阅读 [开发说明与规范](DEVELOPMENT.md) 和 [AI 执行规则](AGENTS.md)。当前工程结构与规则以开发说明和现行 SDK 为准；下方按日期记录的旧导出信息保留作历史参考。
+Developers and AI tools should first read the [development guide](DEVELOPMENT.md) and [AI contributor rules](AGENTS.md), both in Chinese. Use the development guide and the current SDK for the current project layout and rules. The dated export and validation records below document earlier versions.
 
-> **产测程序及进入烧录模式的链路禁止修改。否则可能导致设备无法进入烧录，失去正常恢复能力。** 保护范围和入口见开发说明第 2 节。
+> **Keep the factory-test code and the path into flash mode intact. Changes can prevent the device from entering flash mode and leave it without a working recovery path.** See Section 2 of the development guide for the protected code and entry points.
 
-## 环境与一键构建
+## Development Environment and Build
 
-### 1. 准备 Linux 环境
+### 1. Set up Linux
 
-使用 x86_64 Linux 和 Python 3.8 或以上。Windows 用户可在 x86_64 电脑上通过管理员 PowerShell 执行 `wsl --install -d Ubuntu`，按提示重启后进入 WSL2 Ubuntu。用 `wsl -l -v` 查看 Ubuntu 的 WSL 版本。后续命令都在 Linux 终端执行，建议把仓库克隆到 Linux 家目录（如 `~/AstroTooDevice`）。
+Use x86_64 Linux and Python 3.8 or later. On an x86_64 Windows PC, run `wsl --install -d Ubuntu` from an administrator PowerShell session. Restart if prompted and open Ubuntu in WSL 2. Run `wsl -l -v` from PowerShell to check the WSL version. Run the remaining commands in the Linux terminal and keep the checkout on the Linux filesystem, for example in `~/AstroTooDevice`.
 
-在 Ubuntu 中安装依赖。后两个包提供全志打包程序 `dragon` 所需的 32 位运行库。Windows 上的 WSL 安装步骤见 [Microsoft WSL 安装文档](https://learn.microsoft.com/windows/wsl/install)。
+Install the dependencies on Ubuntu. The last two packages provide the 32-bit runtime libraries required by the Allwinner `dragon` packaging tool. For Windows setup details, see the [Microsoft WSL installation guide](https://learn.microsoft.com/windows/wsl/install).
 
 ```bash
 sudo apt update
 sudo apt install -y git git-lfs python3 make libc6-i386 lib32stdc++6
 ```
 
-### 2. 获取源码和固定工具链
+### 2. Get the source and fixed toolchain
 
 ```bash
 git lfs install
@@ -29,165 +29,165 @@ cd AstroTooDevice
 git lfs pull
 ```
 
-Git LFS 用于下载固定 SDK 的两个资源镜像。仓库自带 Linux x86_64 版玄铁 Xuantie V3.3.0 工具链，GCC 版本为 14.3.0。工具名以 `riscv64-unknown-elf-` 开头，构建脚本按板型参数生成 F101-S3 的 C907 RV32 固件。
+Git LFS downloads two resource images used by the fixed SDK. The repository includes the x86_64 Linux build of the Xuantie V3.3.0 toolchain with GCC 14.3.0. The tools use the `riscv64-unknown-elf-` prefix. The build script supplies the board-specific flags that target the F101-S3's C907 RV32 core.
 
-在工程根目录运行以下命令，确认交叉编译器可执行。构建脚本按 `sdk.lock` 对应的清单直接定位工具链，无需设置 `PATH` 或 `CROSS_COMPILE`。
+From the repository root, check that the cross-compiler runs. The build script uses the SDK manifest pinned by `sdk.lock` to locate the toolchain directly, so you can use your existing `PATH` and leave `CROSS_COMPILE` unset.
 
 ```bash
 TC="$PWD/toolchain/Xuantie-900-gcc-elf-newlib-x86_64-V3.3.0/bin"
 "$TC/riscv64-unknown-elf-gcc" --version
 ```
 
-### 3. 校验并构建
+### 3. Verify and build
 
 ```bash
-bash build.sh --verify-only     # 检查固定 SDK 和工具链的完整性
-bash build.sh --jobs 8          # 编译应用、链接、校验并打包
+bash build.sh --verify-only     # Verify the fixed SDK and toolchain
+bash build.sh --jobs 8          # Compile, link, validate, and package the application
 ```
 
-构建后可用同一套工具链检查 ELF 架构。
+After building, use the same toolchain to inspect the ELF architecture.
 
 ```bash
 "$TC/riscv64-unknown-elf-readelf" -h out/rt_system.elf
 ```
 
-其他命令：
+Additional build commands are available.
 
 ```bash
-bash build.sh --rebuild --jobs 8 # 全量重编应用，不编译底层
-bash build.sh --no-pack         # 只生成 ELF/BIN
-bash build.sh --pack-only       # 重新打包已有 out/rt_system.bin
-bash build.sh --clean           # 仅删除本工程 build/ 和 out/
+bash build.sh --rebuild --jobs 8 # Recompile the application against the prebuilt SDK
+bash build.sh --no-pack         # Generate the ELF and BIN only
+bash build.sh --pack-only       # Package the existing out/rt_system.bin
+bash build.sh --clean           # Remove this project's build/ and out/ directories only
 ```
 
-也可以使用 `make`、`make verify`、`make rebuild`、`make pack`、`make clean`。
+You can also use `make`, `make verify`, `make rebuild`, `make pack`, and `make clean`.
 
-## 目录与修改范围
+## Repository Layout and Application Changes
 
-| 目录／文件 | 内容及用途 |
+| Path | Purpose |
 |---|---|
-| `src/` | 原 `lichee/rtos/projects/f101s3/astrotoo/src` 的应用源码快照，可修改 |
-| `app_sources.txt` | 当前配置启用的应用编译单元清单，可添加新源文件 |
-| `sdk/lib/` | 固定底层的普通静态库及原有厂商链接库，不引用原工程 |
-| `sdk/sysroot/` | 应用编译需要的接口头文件，保留原目录层级 |
-| `sdk/config/` | 固定板型、配置、每个编译单元的准确编译参数和链接参数 |
-| `sdk/linker/` | 已预处理的固定链接脚本 |
-| `sdk/pack/` | 固定 Bootloader、分区、资源镜像和打包工具 |
-| `toolchain/` | 固定交叉编译工具链 |
-| `sdk.lock`、`sdk/manifest.json` | SDK 版本及完整性校验，不属于防破解机制 |
-| `build/` | 应用对象、依赖、逐文件编译日志和打包暂存 |
-| `out/` | 新生成的固件和构建报告 |
-| `verification/` | 本次导出和验证记录，不是用户编译依赖 |
+| `src/` | Editable application source snapshot from `lichee/rtos/projects/f101s3/astrotoo/src` |
+| `app_sources.txt` | Application compilation units for the current configuration. Add new source files here. |
+| `sdk/lib/` | Standard static archives for the fixed platform and the original vendor libraries, all contained in this repository |
+| `sdk/sysroot/` | Interface headers required by the application, with their original directory layout |
+| `sdk/config/` | Fixed board configuration, exact compiler flags per compilation unit, and linker flags |
+| `sdk/linker/` | Preprocessed linker scripts for the fixed SDK |
+| `sdk/pack/` | Fixed bootloader, partitions, resource images, and packaging tools |
+| `toolchain/` | Fixed cross-compilation toolchain |
+| `sdk.lock`, `sdk/manifest.json` | SDK version and file integrity checks |
+| `build/` | Application objects, dependency files, per-file compiler logs, and packaging staging area |
+| `out/` | Generated firmware and build report |
+| `verification/` | Local export and validation records. Application builds can run without these records. |
 
-SDK 与工具链在构建前逐文件校验。配置变化应由维护者发布新 SDK，而不是让用户修改 `defconfig`、`autoconf.h` 或链接脚本。`src` 内原有 Makefile 作为源码快照保留，新构建入口不执行它们，不提供 `menuconfig` 或 `mboot`。
+The build checks the SDK and toolchain file by file before compiling. Configuration changes require a new SDK from the maintainer. Use the repository's build script for application work and keep `defconfig`, `autoconf.h`, and the linker scripts intact. The original Makefiles under `src/` are retained as part of the snapshot. The standalone build has its own entry point and has no `menuconfig` or `mboot` target.
 
-修改现有 `.c/.cpp/.h` 后直接重新构建。头文件变化通过依赖文件触发相应应用单元重编；底层预编译对象保持不变。涉及跨应用／底层接口的结构体布局、编译宏或调用约定不能单独变更。
+After editing an existing `.c`, `.cpp`, or `.h` file, run the build again. Dependency files identify the application units affected by header changes. The application links against the same precompiled platform objects. Structure layouts, compiler defines, and calling conventions shared with the platform must stay compatible with the SDK binaries.
 
-原应用二维码模块直接包含 LVGL 的 MIT QR 编码器源码。为避免用户构建读取底层源码树，这份实现和头文件被复制到 `src/thirdparty/qrcode/`；新副本仅调整了包含路径，原工程不变。
+The application QR code module directly includes the MIT-licensed LVGL QR encoder. The implementation and header are included in `src/thirdparty/qrcode/` so the standalone build can use local files. The copy adjusts only include paths.
 
-新增源文件后将相对 `src/` 的路径逐行加入 `app_sources.txt`。已有单元严格使用导出时参数；新增单元继承同语言、目录最接近的现有单元参数。不要把目录下所有第三方源文件批量加入，因为其中包含当前配置未启用的实现。
+Add each new source file to `app_sources.txt` on its own line, using a path relative to `src/`. Existing compilation units use their exact exported flags. New units inherit flags from an existing unit with the closest language and directory. Add only the third-party units you intend to compile, since some implementations are disabled in the current configuration.
 
-## 产物与刷机
+## Build Outputs and Flashing
 
-- `out/rt_system.elf`、`rt_system.bin`、`rt_system.map`、`rt_system.syms`：新链接的 RTOS 和调试材料。
-- `out/rtos_freertos_f101s3_uart0_480Mmmc.img`：当前固定 f101s3_astrotoo / 480Mmmc 板型的完整量产烧录包。
-- `out/rtos_pkg_nor.fex`、`rtos_pkg_nor.zip`：当前原工程 RTOS 分区包格式及压缩包；名字沿用原 SDK，实际板型为 480Mmmc。
-- `out/build-report.json`：SDK ID、构建耗时、重编数量、产物大小和 SHA-256。
+- `out/rt_system.elf`, `rt_system.bin`, `rt_system.map`, and `rt_system.syms` contain the linked RTOS image and debugging information.
+- `out/rtos_freertos_f101s3_uart0_480Mmmc.img` is the complete production flash image for the fixed `f101s3_astrotoo` / `480Mmmc` target.
+- `out/rtos_pkg_nor.fex` and `rtos_pkg_nor.zip` contain the RTOS partition package. Their filenames follow the original SDK naming convention for the `480Mmmc` target.
+- `out/build-report.json` records the SDK ID, build duration, number of recompiled units, artifact sizes, and SHA-256 hashes.
 
-Windows 烧录工具随工程提供。下载并解压 [PhoenixSuit 烧录工具](tools/phoenSuit.zip)，打开 PhoenixSuit 后选择上面列出的完整 `.img` 镜像，按设备现有烧录流程操作。
+On Windows, download and extract the [PhoenixSuit flashing tool](tools/phoenSuit.zip). Open PhoenixSuit, select the complete `.img` file listed above, and follow the device's existing flashing procedure.
 
-打包在新工程 `build/pack` 中进行：重新生成 RTOS 包，再恢复固定 U-Boot 包，最后由原全志工具生成完整 `.img`。不会简单拼接二进制或覆盖原工程烧录包。打包检查 RTOS 加载内存上限和 bootA/bootB 分区容量。
+Packaging runs in `build/pack`. It regenerates the RTOS package, restores the fixed U-Boot package, and invokes the Allwinner tool to generate the complete `.img`. It checks the RTOS load-memory limit and both the `bootA` and `bootB` partition capacities. The flash image from the original project stays intact.
 
-完整量产包包含固定资源分区，使用现有量产刷机流程；不要把它当成保证保留用户数据的应用增量更新包。RTOS 分区包仅能通过设备原本支持的升级流程使用。本工程没有自动烧写设备，也没有生成指向官方服务器的 OTA 描述或上传产物。硬件启动、显示、联网和恢复仍需要在开发设备实测。
+The complete image includes the fixed resource partitions. Use the existing production flashing procedure and assume that flashing may overwrite user data. Use the RTOS partition package only through the device's supported upgrade procedure. The local build produces flashable artifacts. Flashing a device and publishing an OTA update are separate operations. Verify startup, display, networking, and recovery on a development device.
 
-> 2026-11-25 开源策略：OSS 完整只读实现仅编入 SDK .a，SRC 不带实现/KEY；百炼、LyricFind 仍禁用且不交付凭据，`Device/UploadLog` 禁用。新同步的候选和备份保存在工程外的 `AstroToo_open_maintenance/`；本次归档的旧验证材料见 `verification/private-archive-index.json`。以下历史记录不代表新策略的功能状态。
+> Open-source policy as of 2026-11-25. The complete read-only OSS implementation is compiled into SDK static archives. The application source contains only the corresponding interfaces and callers. Bailian and LyricFind remain disabled, and their credentials are excluded from the distribution. `Device/UploadLog` is disabled. New synchronization candidates and backups are stored outside the repository in `AstroToo_open_maintenance/`. The local `verification/private-archive-index.json` records earlier archived verification materials. The dated records below document the policy in effect at the time.
 
-> 共享 AES 使用 SDK 中已有的私有 LIB 实现，公开 SRC 的旧 KEY/IV 副本已移除；加解密协议、接口和运行行为不变，产测及烧录恢复链路不改。
+> Shared AES uses the SDK's existing private library implementation. The old key and IV copies have been removed from the public application sources. The encryption protocol, API, runtime behavior, factory tests, and flash recovery path retain their existing behavior.
 
-## 内部维护与发布
+## Internal Maintenance and Release
 
-### 仅同步 SDK，保留当前应用源码
+### Synchronize the SDK while keeping the application source
 
-原工程完成底层编译和资源打包后，在本工程根目录执行：
+After building the platform and packaging the resources in the original project, run the SDK synchronization command from this repository's root.
 
 ```bash
 bash sync_sdk.sh --jobs 8
-# 默认读取同级 AstroToo；也可以指定构建机上的原工程路径：
+# The default is a sibling AstroToo checkout. To specify the source explicitly, run
 bash sync_sdk.sh --source /home/qifi/esp/allwinner/AstroToo --jobs 8
-# 只导出并验证候选 SDK，不替换当前 SDK：
+# Export and validate a candidate SDK without installing it
 bash sync_sdk.sh --check-only --jobs 8
-# 原工程将原应用模块移入库等情况下，显式对齐编译清单，仍不修改 src/：
+# Align the application source list when modules move into a library
 bash sync_sdk.sh --align-source-list --jobs 8
-# 仅用于旧版未更新 SRC、缺少运行库锁补丁源码时的迁移：
+# Migration only for older source trees without the newlib stdio lock patch
 bash sync_sdk.sh --align-source-list --freeze-app-source newlib_stdio_lock.c --jobs 8
 ```
 
-也可以运行 `make sync-sdk JOBS=8`。命令需要 Linux/WSL 和完整镜像打包运行库，与正常构建相同。
+You can also run `make sync-sdk JOBS=8`. The command uses the same Linux or WSL environment and full-image packaging libraries as the regular build.
 
-同步包括 `sdk/`（静态库、接口头文件、配置、链接脚本、Bootloader、固定资源镜像和打包工具）、`toolchain/`、`sdk.lock`、厂商许可证及输入快照。**不会修改 `src/`；默认也不修改 `app_sources.txt`，不会在原工程中执行编译或打包。** 原工程的源文件改动必须先在原工程完成相应编译；`board/.../data` 的改动必须先完成资源打包，命令读取的是已有产物。
+Synchronization copies `sdk/` (static archives, public headers, configuration, linker scripts, bootloader, fixed resource images, and packaging tools), `toolchain/`, `sdk.lock`, vendor licenses, and the input snapshot. It leaves `src/` intact and preserves `app_sources.txt` by default. It reads artifacts that already exist in the original project. Build any source changes there first and repackage the resources after changes under `board/.../data`.
 
-当前原工程已将 net、Zstandard、WebP、SQLite、音频解码器和 minilzo 移入 `astrotoo_bundle` 库。对于最初包含这些模块源码的应用清单，首次迁移需使用 `--align-source-list`：移除旧 SDK 编译、而新 SDK 已不再作为应用编译的单元，加入新 SDK 的应用单元，保留本地新增自定义单元和注释。变更明细记入同步报告，旧清单随旧 SDK 备份并参与回滚。物理源码文件继续保留，但移入库的单元不再参与应用编译；修改这些旧副本不会改变库。若新清单需要的应用文件在本地不存在，验证会失败，不自动从原工程同步源码。
+The original project moved networking, Zstandard, WebP, SQLite, audio decoders, and minilzo into the `astrotoo_bundle` library. When migrating an application list that still includes those modules, run `--align-source-list` once. It drops units compiled as application sources in the old SDK that now come from a library and adds the application units from the new SDK. It preserves local units and comments. The synchronization report records the changes and the previous list is backed up with the old SDK for rollback. The old source files stay on disk. Editing them has no effect on the built library. If the new list requires a source file missing locally, validation fails and the maintainer must supply the file.
 
-可用 `--freeze-app-source 相对src的路径` 明确指定个别模块由原工程已编译的对象提供，例如本次新增的 `newlib_stdio_lock.c` 运行库补丁。导出器将对象纳入固定静态库，并保持它与应用对象的原始链接顺序，不复制源文件。模块名保存在 `sdk/config/frozen_application.json`，后续普通同步会沿用此设置；原工程不再提供该模块时会报错，需要维护者重新确定接口。它不会自动将所有缺失应用文件转为二进制。当前项目的两个 newlib stdio 锁包装链接参数也会随 SDK 导出。
+Use `--freeze-app-source PATH_RELATIVE_TO_SRC` to select a module that should use the object already built by the original project, such as the `newlib_stdio_lock.c` runtime patch used in an earlier migration. The exporter adds the object to a fixed archive at its original position relative to the application objects. It records the module in `sdk/config/frozen_application.json` for future syncs. If the original project stops providing the module, synchronization reports an error so the maintainer can review the interface. Only explicitly selected modules use this mechanism. SDK export also preserves the two newlib stdio linker wrapping flags.
 
-本工程现已完成 SRC 更新，`newlib_stdio_lock.c` 已作为应用源码参与编译，不需要上述冻结参数；普通 SDK 同步命令仍保持 `src/` 不变。
+The application source has since been updated to compile `newlib_stdio_lock.c` directly, so the freeze flag is unnecessary for the current tree. A standard SDK sync still preserves `src/`.
 
-流程是：在 `verification/sdk-sync/<运行编号>/candidate/` 导出候选 SDK，用当前应用源码的临时副本完成全量编译和打包；通过后备份旧 SDK 与 `build/out`，替换固定文件，再在正式路径重新编译、打包。这样不会沿用旧 SDK 的应用对象。当前应用与新接口不兼容时，候选验证失败并保留原 SDK。安装后构建失败会恢复旧 SDK 和旧产物；检测到并发 SDK 编辑时停止自动回滚，保留修改与备份供人工处理。
+The sync first exports a candidate SDK under `verification/sdk-sync/<run-id>/candidate/` and performs a full build and package with a temporary copy of the current application. When the candidate passes, the sync backs up the previous SDK and `build/` and `out/`, installs the fixed files, and rebuilds and packages in the main checkout. This regenerates all application objects for the new SDK. If the application is incompatible with the candidate SDK, validation fails and the current SDK stays installed. If the build fails after installation, the sync restores the previous SDK and build outputs. If it detects concurrent SDK changes, it stops automatic rollback and preserves the changes and backup for manual review.
 
-应用源码和清单在同步前后进行内容比较；发现并发修改会停止更新，不覆盖源码。构建、清理和同步使用同一进程锁，不能同时执行。锁随进程退出释放，不需要手动删除锁文件。
+Synchronization compares the application source and source list before and after the operation and stops if it detects concurrent edits. Build, clean, and sync share one process lock and must run separately. The process releases the lock when it exits. Leave the lock file in place.
 
-每次运行的日志及 `result.json`（失败时为 `failure.json`）位于对应的 `verification/sdk-sync/<运行编号>/`。旧版本在其 `backup/` 中保留，候选工程也保留供排查，每次可能占用数 GB；确认新版本正常后可自行归档清理相应运行目录。`verification/integration-results.json` 是首次导出的验证记录，新版本以本次同步报告和 `out/build-report.json` 为准。同步期间不要手工修改 SDK 或源工程的构建产物。
+Each run writes logs and `result.json` (or `failure.json`) under `verification/sdk-sync/<run-id>/`. The run also keeps the previous version in `backup/` and retains the candidate checkout for troubleshooting. A run can take several gigabytes of disk space. Archive or remove its run directory once you have verified the installed version. The initial export record is `verification/integration-results.json`. For later versions, consult the corresponding synchronization report and `out/build-report.json`. Keep the SDK and the original project's build outputs stable while synchronization runs.
 
-### 首次完整导出
+### Perform the initial full export
 
-`tools/export_sdk.py` 是内部维护工具，只读取一个已经构建完成的原工程，不运行原工程编译。它拒绝覆盖已有 `src/sdk/toolchain`，只适用于导出到新的空工程骨架：
+`tools/export_sdk.py` is an internal maintenance tool that reads artifacts from an already-built original project. It requires a fresh project scaffold with no existing `src/`, `sdk/`, or `toolchain/` trees.
 
 ```bash
 python3 tools/export_sdk.py --source /path/to/AstroToo --output /path/to/new-project
 ```
 
-输入必须包含完整对象、对应 `.cmd`、链接脚本、工具链以及匹配的 `out/f101s3/astrotoo/image` 打包暂存材料。当前导出器针对已验证的单 RTOS 镜像、无 XIP/PSRAM 分离镜像、无内核压缩、无 kallsyms 配置；不把不支持的配置静默降级。当前链接规则以现有 C907 RV32 配置为基准。
+The inputs must include all object files, their corresponding `.cmd` files, linker scripts, the toolchain, and the matching packaging files staged under `out/f101s3/astrotoo/image`. The exporter supports the verified single RTOS image layout without a separate XIP/PSRAM image, kernel compression, or kallsyms. It rejects unsupported configurations. The linker rules follow the existing C907 RV32 configuration.
 
-导出会检查读取的源码／对象在导出过程中是否变化，并留下 SHA-256 快照。原工程可以继续由其他人编辑；快照之后的变化不会自动进入这个 SDK。
+The exporter checks for changes to the source and objects it reads during export and records a SHA-256 snapshot. Subsequent changes in the original project require another export or sync to reach this SDK.
 
-## 首次导出验证记录
+## Initial Export Validation
 
-679 个应用编译单元已从源码编译，并与 1,247 个预编译底层对象成功链接，完整 480Mmmc 烧录包已生成。集成验证确认：
+The initial export compiled 679 application units from source, linked them with 1,247 prebuilt platform objects, and generated the complete 480Mmmc flash image. Integration checks confirmed the following results.
 
-- 未修改应用时重编数量为 0；新增应用源码只重编新增单元，标记成功进入二进制，测试修改随后已清除。
-- 修改固定 SDK 配置会使完整性校验失败。
-- RTOS 包的校验和有效，其中 RTOS 负载与新链接的 BIN 完全一致；完整烧录包包含该 RTOS 包及固定 Bootloader。
-- SDK 使用普通静态库，没有引用原工程的 thin archive；应用编译依赖不指向原源码树。
-- 导出涉及的 7,838 个原工程输入文件 SHA-256 未改变。未烧写设备，硬件运行尚未验证。
+- An unchanged application rebuilt zero units. Adding one source file rebuilt only that unit and put its test marker in the binary. The test changes were then removed.
+- Editing a fixed SDK configuration triggered an integrity check failure.
+- The RTOS package checksums were valid and its payload exactly matched the linked BIN. The complete flash image contained that RTOS package and the fixed bootloader.
+- The SDK contained standard static archives, and the application build used only local dependencies.
+- All 7,838 input files from the original project retained their SHA-256 hashes. The checks stopped at image generation, with on-device validation still pending.
 
-详细记录见 `verification/integration-results.json`。可在没有同时编辑本工程源码时重跑集成验证；验证脚本会短暂修改一个 SDK 配置和添加一个应用探针，检查后恢复自身改动：
+See `verification/integration-results.json` for the detailed local record. Run the integration check when the checkout is free of concurrent edits. The script temporarily changes one SDK configuration file and adds an application probe, then reverts its changes after the checks.
 
 ```bash
 python3 tools/validate_project.py
 ```
 
-## SDK 同步验证记录
+## SDK Synchronization Validation
 
-此前已完成首次库结构迁移及一次默认 `bash sync_sdk.sh --jobs 8` 的完整同步。该次 SDK 为 `f101s3_astrotoo-20261013T075737Z`，538 个应用编译单元与更新后的预编译 SDK 完成全量编译、链接和打包。
+The initial library migration and a complete default `bash sync_sdk.sh --jobs 8` run were validated. SDK `f101s3_astrotoo-20261013T075737Z` compiled 538 application units, linked them against the updated prebuilt SDK, and packaged the result.
 
-- `src/` 内容保持不变；首次迁移将 141 个已移入库的单元移出应用清单，后续默认同步也保持清单不变。
-- `newlib_stdio_lock.c` 由 SDK 对象提供，两个包装链接参数和对应符号均已核验。
-- 10 项替换、回滚、并发保护、清单对齐和链接顺序测试通过。
-- RTOS 包校验和、BIN 负载、完整镜像中的 Bootloader 及两个资源分区均通过内容核验；7 个 SDK 静态库均为普通 archive。
-- 应用编译依赖没有指向原工程。原工程在导出后继续发生编译产物更新，差异已记录在检查报告中；本次 SDK 保留导出时的快照，后续更新在原工程编译、打包完成后再次同步。
+- The migration kept `src/` intact and removed 141 now-prebuilt units from the application source list. The subsequent default sync kept the list as it was.
+- The SDK supplied the object for `newlib_stdio_lock.c`. Both linker wrapping flags and the corresponding symbols were verified.
+- Ten tests passed for replacement, rollback, concurrent edit protection, source list alignment, and link order.
+- The RTOS package checksum and BIN payload were verified, along with the bootloader and both resource partitions in the full image. All seven SDK archives were standard static archives.
+- Application compile dependencies were local to this project. The original project continued to update its build outputs after the export and those differences were recorded. This SDK retained the exported snapshot. Further synchronization requires the original project to finish building and packaging first.
 
-报告见 `verification/sdk-sync/20261013T075627118113Z/result.json` 和同目录 `post-checks.json`。旧 SDK、产物及首次迁移的旧清单位于各次运行的 `backup/`。本次未烧写设备。
+The local reports are `verification/sdk-sync/20261013T075627118113Z/result.json` and `post-checks.json` in the same directory. Each run kept the previous SDK and build outputs under `backup/`. The initial migration backup also kept the original application source list. On-device flashing was outside the scope of this validation.
 
-## SRC 与配套 SDK 更新记录
+## Application Source and SDK Update
 
-当前应用源码已按原工程的库拆分结构更新，SDK 为 `f101s3_astrotoo-20261013T081137Z`。更新前对比首次导出快照，确认本地没有独立源码修改；原工程只作为只读输入。
+This update aligned the application source with the original project's library split and used SDK `f101s3_astrotoo-20261013T081137Z`. Before the update, a comparison with the initial export snapshot confirmed that the local application tree had no independent edits. The original project served as a read-only input.
 
-- 新增 4 个文件、更新 25 个文件，454 个已移入库的旧文件从应用树移除。应用树从 1,718 个文件更新为 1,268 个文件。
-- net、WebP、Zstandard、SQLite、音频解码器、minilzo 等实现由 `sdk/lib/projects_fixed_1.a` 中的预编译 bundle 提供，公共头文件位于 `sdk/sysroot/rtos/projects/f101s3/astrotoo/lib/include/`。
-- `newlib_stdio_lock.c` 恢复为源码编译，`sdk/config/frozen_application.json` 清单为空；应用编译清单按原工程当前配置更新为 539 个单元。
-- 二维码模块继续保留独立工程需要的 include 路径适配。
-- 候选目录及正式目录均已完成全量编译、链接和完整烧录包生成，尚未烧写设备。
+- The update added four files, changed 25 files, and removed 454 files whose modules had moved into the library. The application tree went from 1,718 to 1,268 files.
+- The prebuilt bundle in `sdk/lib/projects_fixed_1.a` provided networking, WebP, Zstandard, SQLite, audio decoder, and minilzo implementations. The public headers were at `sdk/sysroot/rtos/projects/f101s3/astrotoo/lib/include/`.
+- `newlib_stdio_lock.c` returned to source compilation. `sdk/config/frozen_application.json` was empty, and the application build list matched the original configuration at 539 units.
+- The QR code module kept its local include paths for the standalone build.
+- Both the candidate and installed checkouts completed a full compile, link, and flash-image build. On-device flashing remained pending.
 
-更新报告见 `verification/src-update/20261013T081036954367Z/result.json`。旧 `src/`、编译清单、SDK 和烧录包均保存在该次运行的 `backup/` 中。
+The local update report is `verification/src-update/20261013T081036954367Z/result.json`. Its `backup/` contains the previous `src/`, application source list, SDK, and flash image.
 
-**这个目录是内部工程交付，不代表全志 SDK 已取得公开再分发许可，也不宣称只提供二进制就满足 GPL。公开推送前必须完成 `licenses/RELEASE_CHECKLIST.md`。**
+Before a public release, follow the [release checklist](licenses/RELEASE_CHECKLIST.md) to confirm redistribution rights for the Allwinner SDK and the corresponding source obligations for GPL-covered binaries.
