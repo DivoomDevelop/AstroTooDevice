@@ -94,7 +94,17 @@ Add each new source file to `app_sources.txt` on its own line, using a path rela
 - `out/rtos_pkg_nor.fex` and `rtos_pkg_nor.zip` contain the RTOS partition package. Their filenames follow the original SDK naming convention for the `480Mmmc` target.
 - `out/build-report.json` records the SDK ID, build duration, number of recompiled units, artifact sizes, and SHA-256 hashes.
 
-On Windows, download and extract the [PhoenixSuit flashing tool](tools/phoenSuit.zip). Open PhoenixSuit, select the complete `.img` file listed above, and follow the device's existing flashing procedure.
+### Package and flash with PhoenixSuit
+
+From the repository root in Linux or WSL 2, run the script to build and package the firmware directly.
+
+```bash
+bash debug_gerate_firmware.sh --jobs 8
+```
+
+The flash image is written to `out/rtos_freertos_f101s3_uart0_480Mmmc.img` relative to the repository root. The script turns on application debug logs and writes the matching debugging artifacts to `out/rt_system_debug.zip`.
+
+On Windows, download and extract the [PhoenixSuit flashing tool](tools/phoenSuit.zip). Open PhoenixSuit and select `out/rtos_freertos_f101s3_uart0_480Mmmc.img` as the firmware image. Put the device into flash mode using its existing procedure, then start flashing in PhoenixSuit.
 
 Packaging runs in `build/pack`. It regenerates the RTOS package, restores the fixed U-Boot package, and invokes the Allwinner tool to generate the complete `.img`. It checks the RTOS load-memory limit and both the `bootA` and `bootB` partition capacities. The flash image from the original project stays intact.
 

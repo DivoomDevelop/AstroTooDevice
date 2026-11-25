@@ -13,6 +13,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import zipfile
 from operation_lock import operation_lock
@@ -69,7 +70,7 @@ def run(cmd, log):
         raise RuntimeError(f"command failed ({result.returncode}); {log.relative_to(ROOT)}\n" + "\n".join(tail))
 
 
-def compile_app(recipes, expand, tc, jobs, rebuild):
+def compile_app(recipes, expand, tc, jobs, rebuild, debug):
     sources = [s.strip() for s in (ROOT / "app_sources.txt").read_text().splitlines()
                if s.strip() and not s.lstrip().startswith("#")]
     if len(sources) != len(set(sources)):
@@ -97,6 +98,8 @@ def compile_app(recipes, expand, tc, jobs, rebuild):
         dep = obj.with_suffix(".d")
         state = obj.with_suffix(".json")
         flags = [expand(x) for x in recipe["flags"]]
+        if debug:
+            flags.append("-DDIVOOM_APP_DEBUG_LOG")
         cmd = [str(tc / "bin" / ("riscv64-unknown-elf-" + recipe["compiler"])), *flags,
                "-MMD", "-MF", str(dep), "-MT", str(obj), "-c", str(src), "-o", str(obj)]
         signature = hashlib.sha256(json.dumps(cmd).encode()).hexdigest()
@@ -177,6 +180,20 @@ def pack(binary, board):
     return [OUT / image.name, OUT / "rtos_pkg_nor.fex", OUT / "rtos_pkg_nor.zip"]
 
 
+def pack_debug(elf, binary, image):
+    archive = OUT / "rt_system_debug.zip"
+    with tempfile.TemporaryDirectory(prefix=".debug-", dir=OUT) as directory:
+        staged = Path(directory) / archive.name
+        with zipfile.ZipFile(staged, "w", compression=zipfile.ZIP_DEFLATED) as z:
+            for path in (binary, elf, elf.with_suffix(".map"), elf.with_suffix(".syms")):
+                z.write(path, path.name)
+            z.writestr("README_DEBUG.txt",
+                       "RTOS debugging artifacts for " + image.name + "\n"
+                       "Use the matching .img file in PhoenixSuit. Keep this archive for debugging.\n")
+        staged.replace(archive)
+    return archive
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--jobs", "-j", type=int, default=min(os.cpu_count() or 2, 8))
@@ -185,7 +202,10 @@ def main():
     ap.add_argument("--no-pack", action="store_true", help="build ELF/BIN only")
     ap.add_argument("--pack-only", action="store_true", help="pack an existing out/rt_system.bin")
     ap.add_argument("--clean", action="store_true", help="remove only this project's generated build and out directories")
+    ap.add_argument("--debug", action="store_true", help="enable application debug logs and package symbols")
     args = ap.parse_args()
+    if args.debug and (args.clean or args.verify_only or args.no_pack or args.pack_only):
+        ap.error("--debug requires a full build and package")
     if args.clean:
         for p in (BUILD, OUT):
             if p.exists():
@@ -215,7 +235,8 @@ def main():
     elf, binary = OUT / "rt_system.elf", OUT / "rt_system.bin"
     compiled = 0
     if not args.pack_only:
-        objects, compiled = compile_app(load(SDK / "config/recipes.json"), expand, tc, args.jobs, args.rebuild)
+        objects, compiled = compile_app(load(SDK / "config/recipes.json"), expand, tc,
+                                        args.jobs, args.rebuild, args.debug)
         link = load(SDK / "config/link.json")
         source_names = [s.strip() for s in (ROOT / "app_sources.txt").read_text().splitlines()
                         if s.strip() and not s.lstrip().startswith("#")]
@@ -243,6 +264,8 @@ def main():
     artifacts = [binary]
     if not args.no_pack:
         artifacts += pack(binary, board)
+    if args.debug:
+        artifacts.append(pack_debug(elf, binary, OUT / board["image_name"]))
     report = {"sdk_id": manifest["sdk_id"], "compiled_units": compiled, "elapsed_seconds": round(time.time() - started, 2),
               "artifacts": {p.relative_to(ROOT).as_posix(): {"bytes": p.stat().st_size, "sha256": digest(p)} for p in artifacts},
               "hardware_flash_test": "not performed"}

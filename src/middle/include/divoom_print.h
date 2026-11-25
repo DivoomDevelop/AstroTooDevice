@@ -25,7 +25,7 @@ void divoom_log_write(const char* tag, const char* fmt, ...);
         divoom_log_write(tag, fmt, ##__VA_ARGS__); \
     } while (0)
 
-#if CONFIG_DIVOOM_LOG_LEVEL >= DIVOOM_LOG_LEVEL_STATE
+#if defined(DIVOOM_APP_DEBUG_LOG) || CONFIG_DIVOOM_LOG_LEVEL >= DIVOOM_LOG_LEVEL_STATE
 #define divoom_log_state(fmt,...) DIVOOM_LOG_STATE_IMPL(fmt, ##__VA_ARGS__)
 #else
 #define divoom_log_state(fmt,...) do { } while (0)
@@ -36,7 +36,7 @@ void divoom_log_write(const char* tag, const char* fmt, ...);
 
 #define dm_print printf 
 
-#if CONFIG_DIVOOM_LOG_LEVEL >= DIVOOM_LOG_LEVEL_DEBUG
+#if defined(DIVOOM_APP_DEBUG_LOG) || CONFIG_DIVOOM_LOG_LEVEL >= DIVOOM_LOG_LEVEL_DEBUG
 #define divoom_debug(format,...) do { \
         printf("%s,LINE:%d:" format "\n", __func__, __LINE__, ##__VA_ARGS__); \
     } while (0)
