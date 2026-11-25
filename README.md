@@ -6,6 +6,16 @@ Developers and AI tools should first read the [development guide](DEVELOPMENT.md
 
 > **Keep the factory-test code and the path into flash mode intact. Changes can prevent the device from entering flash mode and leave it without a working recovery path.** See Section 2 of the development guide for the protected code and entry points.
 
+## 云端功能限制 / Cloud feature availability
+
+**开源版本已关闭 OSS 云端照片/视频传输，因为相关 API KEY 不能随开源工程公开。**
+
+**如果设备和 APP 不在同一个局域网，设备不能通过 OSS 接收照片和视频。** 同一局域网内的本地照片、视频传输功能保留。
+
+YouTube 视频/频道查询保留，统一通过 https://appin.divoom-gz.com/Youtube/GetRawDataInfo 请求，不再使用内置 Google API KEY 直连。Google 日历和 Outlook 日历保留原有功能，使用运行时授权信息；本次检查没有发现其中使用硬编码 API KEY。
+
+OSS cloud photo/video transfer is disabled because its API keys cannot be publicly redistributed. **When the device and app are not on the same LAN, the device cannot receive photos or videos through OSS.** Local transfers on the same LAN remain available. YouTube queries use the fixed Divoom proxy without an embedded Google API key. Google Calendar and Outlook Calendar remain available with their existing runtime authorization flow.
+
 ## Development Environment and Build
 
 ### 1. Set up Linux
@@ -111,7 +121,7 @@ Packaging runs in `build/pack`. It regenerates the RTOS package, restores the fi
 
 The complete image includes the fixed resource partitions. Use the existing production flashing procedure and assume that flashing may overwrite user data. Use the RTOS partition package only through the device's supported upgrade procedure. The local build produces flashable artifacts. Flashing a device and publishing an OTA update are separate operations. Verify startup, display, networking, and recovery on a development device.
 
-> Open-source policy as of 2026-11-25. The complete read-only OSS implementation is compiled into SDK static archives. The application source contains only the corresponding interfaces and callers. Bailian and LyricFind remain disabled, and their credentials are excluded from the distribution. `Device/UploadLog` is disabled. New synchronization candidates and backups are stored outside the repository in `AstroToo_open_maintenance/`. The local `verification/private-archive-index.json` records earlier archived verification materials. The dated records below document the policy in effect at the time.
+> Open-source policy as of 2026-11-25. The OSS implementation and credentials are removed from the distribution; compatibility download interfaces return failure. YouTube uses the fixed Divoom proxy, while Google Calendar and Outlook Calendar remain available. Bailian and LyricFind remain disabled, and their credentials are excluded from the distribution. `Device/UploadLog` is disabled. New synchronization candidates and backups are stored outside the repository in `AstroToo_open_maintenance/`. The local `verification/private-archive-index.json` records earlier archived verification materials. The dated records below document the policy in effect at the time.
 
 > Shared AES uses the SDK's existing private library implementation. The old key and IV copies have been removed from the public application sources. The encryption protocol, API, runtime behavior, factory tests, and flash recovery path retain their existing behavior.
 
@@ -202,3 +212,8 @@ This update aligned the application source with the original project's library s
 The local update report is `verification/src-update/20261013T081036954367Z/result.json`. Its `backup/` contains the previous `src/`, application source list, SDK, and flash image.
 
 Before a public release, follow the [release checklist](licenses/RELEASE_CHECKLIST.md) to confirm redistribution rights for the Allwinner SDK and the corresponding source obligations for GPL-covered binaries.
+
+## Current open-source service restrictions
+
+OSS is unavailable; its AccessKeys are excluded from source, SDK archives and firmware. Compatibility OSS download APIs return failure. Delivered photo tasks notify Device/DelPhoto for their original and preview objects and skip download; local albums are retained. Queue acceptance is not confirmation of server deletion.
+YouTube video/channel queries always use https://appin.divoom-gz.com/Youtube/GetRawDataInfo (Type=2/3), without a shipped Google API key. Google Calendar and Outlook Calendar keep their original functionality. Factory-test and flash-entry code are unchanged.

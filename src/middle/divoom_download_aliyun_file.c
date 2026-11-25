@@ -12,27 +12,8 @@ int divoom_download_aliyun_file_get_file_direct(char *object_name, char *local_f
 }
 int divoom_download_aliyun_file_get_file(char *object_name, char *local_filename, int server_flag)
 {
-    for(int i = 0; i < 3; i++)
-    {
-        if(g_divoom_download_aliyun_file_stop)
-        {
-            return 0;
-        }
-        if(divoom_download_aliyun_file_get_file_direct(object_name, local_filename, server_flag))
-        {
-            return 1;
-        }
-        if(divoom_main_get_wifi_con_status() == 0)
-        {
-            return 0;
-        }
-        if(i < 2)
-        {
-            divoom_port_delay_ms((uint32)(300 * (i + 1)));
-        }
-    }
+    (void)object_name; (void)local_filename; (void)server_flag;
     return 0;
-    
 }
 
 int divoom_download_aliyun_file_get_file_length(char *object_name, int server_flag)
@@ -59,183 +40,68 @@ typedef struct _divoom_download_aliyun_file_ctrl
 
 static Pdivoom_download_aliyun_file_ctrl pdivoom_download_aliyun_file_handle = NULL;
 
+/* Only metadata acknowledgements remain; the existing periodic task drives retry. */
+static pthread_mutex_t s_oss_discard_lock = PTHREAD_MUTEX_INITIALIZER;
+static uint32 s_oss_discard_last_ms;
+static uint32 s_oss_discard_delay_ms = 5000;
+static uint32 s_oss_discard_generation;
+static int s_oss_discard_pending;
+static int s_oss_discard_inflight;
+
+static void divoom_download_aliyun_file_schedule_discard_poll(
+    int empty, int all_queued, int list_response)
+{
+    uint32 now = divoom_port_tick_ms();
+    pthread_mutex_lock(&s_oss_discard_lock);
+    ++s_oss_discard_generation;
+    s_oss_discard_pending = !empty;
+    if (empty || list_response || !s_oss_discard_inflight) {
+        s_oss_discard_inflight = 0;
+        s_oss_discard_last_ms = now;
+        s_oss_discard_delay_ms = all_queued ? 5000 : 30000;
+    }
+    if (pdivoom_download_aliyun_file_handle)
+        pdivoom_download_aliyun_file_handle->load_finish_flag = empty;
+    pthread_mutex_unlock(&s_oss_discard_lock);
+}
+
+
+
 void divoom_download_aliyun_file_task(void *user_data)
 {
-    char file_name[128];
-    int  pic_list[64], pic_num = 0, cur_album_id = 0, pic_id;
-    int download_result;
-    time_t cur_time;
-	struct tm time_now; 
-    Pdivoom_download_aliyun_file_item pcur_item;
-    divoom_photo_album_get_local_photo_request_item pdel_info;
-        
-    if(pdivoom_download_aliyun_file_handle == NULL ||
-       g_divoom_download_aliyun_file_stop ||
-       divoom_queue_items(pdivoom_download_aliyun_file_handle->file_queue) == 0 ||
-       divoom_main_get_wifi_con_status() == 0)
-    {
+    Pdivoom_download_aliyun_file_ctrl handle = pdivoom_download_aliyun_file_handle;
+    uint32 now, generation = 0;
+    int request = 0;
+    (void)user_data;
+    if (handle == NULL || g_divoom_download_aliyun_file_stop ||
+        !handle->run_flag || !divoom_main_get_wifi_con_status() ||
+        divoom_update_system_file_is_downloading())
         return;
+    now = divoom_port_tick_ms();
+    pthread_mutex_lock(&s_oss_discard_lock);
+    if (s_oss_discard_pending &&
+        (uint32)(now - s_oss_discard_last_ms) >=
+            (s_oss_discard_inflight ? 30000U : s_oss_discard_delay_ms)) {
+        s_oss_discard_last_ms = now;
+        s_oss_discard_inflight = 1;
+        generation = s_oss_discard_generation;
+        handle->task_active = 1;
+        request = 1;
     }
-
-    if(divoom_update_system_file_is_downloading())
-    {
-        return;
-    }
-    /* 阿里云任务每次只处理一个队列项，下载前最多回收一个最早移除的表盘。 */
-    divoom_print("[storage_gc] call source=%s line=%d\n", __func__, __LINE__);
-    divoom_clock_manage_clear_removed_clock_data_if_needed();
-    pdivoom_download_aliyun_file_handle->downloading_flag = 1;
-    pcur_item = divoom_queue_pop(pdivoom_download_aliyun_file_handle->file_queue);
-    if(pcur_item == NULL)
-    {
-        return;
-    }
-    pdivoom_download_aliyun_file_handle->task_active = 1;
-    
-    cur_time = time(0);        
-    localtime_r(&cur_time, &time_now);
-    time_now.tm_year += 1900;
-    time_now.tm_mon ++;
-    if(pcur_item->no_del_flag == 1)
-    {
-        sprintf(file_name, "%s/%d.mp4",DIVOOM_VISION_INFO_DIR,pcur_item->photo_id);
-    }
-    else if(pcur_item->no_del_flag == 2)
-    {
-        sprintf(file_name, "%s/%d.webp",DIVOOM_CLOUD_PHOTO_INFO_DIR,pcur_item->photo_id);
-    }
-    else
-    {
-        sprintf(file_name, "%s/%d%d",DIVOOM_SD_APP_PIC_DIR,time_now.tm_year,time_now.tm_mon);
-        divoom_app_com_mk_dir(file_name);
-        strcat(file_name, "/");
-        strcat(file_name, pcur_item->os_name);
-        if(strlen(pcur_item->preview_os_name))
-        {
-            //有预览图的情况
-            int len = strlen(file_name);
-            
-            file_name[len - 3] = 'w';
-            file_name[len - 2] = 'e';
-            file_name[len - 1] = 'b';
-            file_name[len] = 'p';
-            file_name[len + 1] = 0;
-            divoom_download_aliyun_file_get_file(pcur_item->preview_os_name, file_name, pcur_item->server_flag);
-            if(g_divoom_download_aliyun_file_stop)
-            {
-                divoom_system_free(pcur_item);
-                pdivoom_download_aliyun_file_handle->downloading_flag = 0;
-                pdivoom_download_aliyun_file_handle->task_active = 0;
-                return;
-            }
-            {
-                pdel_info.photo_id = pcur_item->photo_id;
-                pdel_info.server_flag = pcur_item->server_flag;
-                strcpy(pdel_info.big_name, pcur_item->preview_os_name);
-                divoom_net_app_send_packet(DIVOOM_NET_COMM_DELETE_ALI_PHOTO, DIVOOM_SERVER_TOPIC,&pdel_info);
-                divoom_print("we will finish preview file: %s, %s !\n", file_name, pcur_item->preview_os_name);
-            }
-            //还原文件名
-            file_name[len - 3] = 'm';
-            file_name[len - 2] = 'p';
-            file_name[len - 1] = '4';
-            file_name[len] = 0;
+    pthread_mutex_unlock(&s_oss_discard_lock);
+    if (request) {
+        int queued = 0;
+        if (!g_divoom_download_aliyun_file_stop && handle->run_flag)
+            queued = divoom_net_app_send_packet_checked(
+                DIVOOM_NET_COMM_GET_ALI_PHOTO_LIST, DIVOOM_SERVER_TOPIC, NULL);
+        pthread_mutex_lock(&s_oss_discard_lock);
+        if (!queued && s_oss_discard_generation == generation) {
+            s_oss_discard_inflight = 0;
+            s_oss_discard_delay_ms = 30000;
         }
+        handle->task_active = 0;
+        pthread_mutex_unlock(&s_oss_discard_lock);
     }
-    download_result = divoom_download_aliyun_file_get_file(
-        pcur_item->os_name, file_name, pcur_item->server_flag);
-    if(g_divoom_download_aliyun_file_stop)
-    {
-        divoom_system_free(pcur_item);
-        pdivoom_download_aliyun_file_handle->downloading_flag = 0;
-        pdivoom_download_aliyun_file_handle->task_active = 0;
-        return;
-    }
-    if(download_result)
-    {
-        //下载成功后删除文件
-        divoom_print("we will finish the file: %d, %d, %s %ld!\n", pcur_item->album_id, pcur_item->photo_id , pcur_item->os_name,  pcur_item->photo_time);
-        if(pcur_item->no_del_flag)
-        {
-            if(pcur_item->pcallback)
-            {
-                pcur_item->pcallback(pcur_item);
-            }
-            divoom_system_free(pcur_item);
-        }
-        else
-        {
-            pdel_info.photo_id = pcur_item->photo_id;
-            pdel_info.server_flag = pcur_item->server_flag;
-            strcpy(pdel_info.big_name, pcur_item->os_name);
-            pdivoom_download_aliyun_file_handle->cur_id ++;
-            divoom_net_app_send_packet(DIVOOM_NET_COMM_DELETE_ALI_PHOTO, DIVOOM_SERVER_TOPIC,&pdel_info);
-            if(pcur_item->album_id >= DIVOOM_PHOTO_START_CLOCK_ID)
-            {
-                pic_id = divoom_pic_phone_manage_add_picture(file_name, pcur_item->save_time, pcur_item->photo_time , pcur_item->photo_x,pcur_item->photo_y, pcur_item->album_id, pcur_item->user_id, pcur_item->photo_title, pcur_item->photo_w, pcur_item->photo_h, divoom_pic_album_manage_check_album_cover(pcur_item->album_id)?0:1);
-                if(pcur_item->pcallback)
-                {
-                    pcur_item->pcallback(pcur_item);
-                }
-                divoom_pic_album_manage_add_list_to_name(pcur_item->album_id, &pic_id, 1);
-                pdivoom_download_aliyun_file_handle->last_album_id   = pcur_item->album_id;
-                pdivoom_download_aliyun_file_handle->last_pic_id   = pic_id;
-            }
-            else
-            {
-                divoom_clock_id_info clock_info;
-                
-                clock_info.clock_id = pcur_item->album_id;
-                clock_info.clock_pos = pcur_item->clock_pos;
-                clock_info.parent_id = pcur_item->parent_id;
-                pic_id = divoom_custom_photo_add_item(&clock_info, pcur_item->save_time, pcur_item->photo_time, file_name);
-                pdivoom_download_aliyun_file_handle->last_album_id   = pcur_item->album_id;
-                pdivoom_download_aliyun_file_handle->last_pic_id   = pic_id;
-            }
-            divoom_queue_push(pdivoom_download_aliyun_file_handle->local_file_queue, divoom_app_com_copy_string(file_name, -1));
-            divoom_system_put_sem(pdivoom_download_aliyun_file_handle->local_file_sem);
-            divoom_system_free(pcur_item);
-            if(divoom_queue_items(pdivoom_download_aliyun_file_handle->file_queue) == 0)
-            {
-                //下载完了，将获取更多
-                if(pdivoom_download_aliyun_file_handle->load_finish_flag == 0)
-                {
-                    divoom_net_app_send_packet(DIVOOM_NET_COMM_GET_ALI_PHOTO_LIST, DIVOOM_SERVER_TOPIC,NULL);
-                }
-            }
-        }
-    }
-    else
-    {        
-        if(divoom_main_get_wifi_con_status())
-        {
-            //如果下载超过十次失败就认为这个文件有问题
-            if(pcur_item->no_del_flag == 0)
-            {
-                divoom_photo_album_get_local_photo_request_item pdel_info;
-                //下载成功后删除文件
-                pdel_info.server_flag = pcur_item->server_flag;
-                pdel_info.photo_id = pcur_item->photo_id;
-                strcpy(pdel_info.big_name, pcur_item->os_name);
-                pdivoom_download_aliyun_file_handle->cur_id ++;
-                divoom_net_app_send_packet(DIVOOM_NET_COMM_DELETE_ALI_PHOTO, DIVOOM_SERVER_TOPIC,&pdel_info);
-                divoom_print("we will delete the file: %d, %s beacuse it fails 10 times\n", pcur_item->photo_id , pcur_item->os_name);
-            }
-            divoom_system_free(pcur_item);
-        }
-        else
-        {
-            divoom_queue_push(pdivoom_download_aliyun_file_handle->file_queue, pcur_item);
-        }
-    }
-    pdivoom_download_aliyun_file_handle->task_active = 0;
-    if(divoom_queue_items(pdivoom_download_aliyun_file_handle->file_queue) == 0 || divoom_main_get_wifi_con_status() == 0)
-    {
-        pdivoom_download_aliyun_file_handle->cur_id = pdivoom_download_aliyun_file_handle->total_num;
-        pdivoom_download_aliyun_file_handle->downloading_flag = 0;
-        return;
-    }
-    return ;
 }
 
 /*********************************************************************
@@ -527,26 +393,7 @@ void divoom_download_aliyun_file_add_local_pic_list(void *para)
 
 void divoom_download_aliyun_file_add_vision_item(int vision_id, char *oss_name,divoom_download_aliyun_file_finish_callback *pcallback)
 {
-    Pdivoom_download_aliyun_file_item pitem_info;
-    
-    pitem_info  = divoom_system_malloc(sizeof(divoom_download_aliyun_file_item));
-    if(pitem_info == NULL)
-    {
-        return;
-    }
-    pitem_info->fail_times = 0;
-    pitem_info->photo_id = vision_id;
-    pitem_info->no_del_flag = 1;
-    strcpy(pitem_info->os_name, oss_name);
-    pitem_info->server_flag = divoom_main_get_server_type();
-    pitem_info->pcallback = pcallback;
-    divoom_queue_push(pdivoom_download_aliyun_file_handle->file_queue, pitem_info);
-    if(divoom_main_get_wifi_con_status())
-    {
-        divoom_main_push_model_event_id(DIVOOM_MODEL_LIGHT_APP, DIVOOM_LIGHT_APP_EVENT_APP_SEND_PHOTO);
-    }
-    divoom_system_put_sem(pdivoom_download_aliyun_file_handle->wait_sem);
-        
+    (void)vision_id; (void)oss_name; (void)pcallback;
 }
 
 /*********************************************************************
@@ -561,27 +408,7 @@ void divoom_download_aliyun_file_add_vision_item(int vision_id, char *oss_name,d
 
 void divoom_download_aliyun_file_add_cloud_photo_item(int vision_id, int oss_flag,char *oss_name,divoom_download_aliyun_file_finish_callback *pcallback)
 {
-    Pdivoom_download_aliyun_file_item pitem_info;
-    
-    pitem_info  = divoom_system_malloc(sizeof(divoom_download_aliyun_file_item));
-    if(pitem_info == NULL)
-    {
-        return;
-    }
-    pitem_info->fail_times = 0;
-    pitem_info->photo_id = vision_id;
-    pitem_info->no_del_flag = 2;
-    strcpy(pitem_info->os_name, oss_name);
-    pitem_info->server_flag = oss_flag;
-    pitem_info->pcallback = pcallback;
-    divoom_queue_push(pdivoom_download_aliyun_file_handle->file_queue, pitem_info);
-        
-    if(divoom_main_get_wifi_con_status())
-    {
-        divoom_main_push_model_event_id(DIVOOM_MODEL_LIGHT_APP, DIVOOM_LIGHT_APP_EVENT_APP_SEND_PHOTO);
-    }
-    divoom_system_put_sem(pdivoom_download_aliyun_file_handle->wait_sem);
-        
+    (void)vision_id; (void)oss_flag; (void)oss_name; (void)pcallback;
 }
 
 /*********************************************************************
@@ -594,69 +421,55 @@ void divoom_download_aliyun_file_add_cloud_photo_item(int vision_id, int oss_fla
 **********************************************************************/
 
 
+/* Discard only photo tasks delivered to this device; never enumerate a bucket. */
+static int divoom_download_aliyun_file_discard_oss_name(
+    const divoom_download_aliyun_file_item *item, const char *name, size_t capacity)
+{
+    divoom_photo_album_get_local_photo_request_item request = {0};
+    const char *end;
+    size_t length;
+    if (item == NULL || name == NULL || item->photo_id <= 0) return 0;
+    end = memchr(name, 0, capacity);
+    if (end == NULL) return 0;
+    length = (size_t)(end - name);
+    if (length == 0) return 1;
+    if (length >= sizeof(request.big_name)) return 0;
+    request.photo_id = item->photo_id;
+    request.server_flag = item->server_flag;
+    memcpy(request.big_name, name, length + 1);
+    return divoom_net_app_send_packet_checked(
+        DIVOOM_NET_COMM_DELETE_ALI_PHOTO, DIVOOM_SERVER_TOPIC, &request);
+}
+
 void divoom_download_aliyun_file_add_item(Pdivoom_download_aliyun_file_item pnew_item, int number, divoom_download_aliyun_file_finish_callback *pcallback, int init_flag)
 {
-    int i, download_files = 0;
-    Pdivoom_download_aliyun_file_item pitem_info;
-    
-    if(number == 0)
-    {
-        pdivoom_download_aliyun_file_handle->load_finish_flag = 1;
+    int all_queued = 1;
+    (void)pcallback;
+    if (g_divoom_download_aliyun_file_stop) return;
+    if (number < 0 || (number > 0 && pnew_item == NULL)) return;
+    if (number == 0) {
+        divoom_download_aliyun_file_schedule_discard_poll(1, 1, init_flag);
         return;
     }
-
-    for(i = 0; i < number; i ++)
-    {
-        pitem_info = divoom_queue_get_cmp(pdivoom_download_aliyun_file_handle->file_queue, &pnew_item[i].photo_id, divoom_download_aliyun_file_add_item_compare);
-        if(pitem_info)
-        {
-        
+    for (int i = 0; i < number; ++i) {
+        const divoom_download_aliyun_file_item *item = &pnew_item[i];
+        int original_queued = divoom_download_aliyun_file_discard_oss_name(
+            item, item->os_name, sizeof(item->os_name));
+        int preview_queued = divoom_download_aliyun_file_discard_oss_name(
+            item, item->preview_os_name, sizeof(item->preview_os_name));
+        if (!original_queued || !preview_queued) {
+            all_queued = 0;
             continue;
         }
-        if(pnew_item[i].file_size >= 50*1024)
-        {
-            //文件过大，将直接删除
-            divoom_photo_album_get_local_photo_request_item pdel_info = {0};
-            
-            pdel_info.photo_id = pnew_item[i].photo_id;
-            pdel_info.server_flag = pnew_item[i].server_flag;
-            strcpy(pdel_info.big_name, pnew_item[i].os_name);
-            divoom_net_app_send_packet(DIVOOM_NET_COMM_DELETE_ALI_PHOTO, DIVOOM_SERVER_TOPIC,&pdel_info);
-            if(strlen(pnew_item[i].preview_os_name))
-            {
-                strcpy(pdel_info.big_name, pnew_item[i].preview_os_name);
-                divoom_net_app_send_packet(DIVOOM_NET_COMM_DELETE_ALI_PHOTO, DIVOOM_SERVER_TOPIC,&pdel_info);
+        if (pdivoom_download_aliyun_file_handle) {
+            if (item->photo_flag != pdivoom_download_aliyun_file_handle->photo_flag) {
+                pdivoom_download_aliyun_file_handle->photo_flag = item->photo_flag;
+                pdivoom_download_aliyun_file_handle->total_num = item->photo_total;
+                pdivoom_download_aliyun_file_handle->cur_id = 0;
             }
-            pdivoom_download_aliyun_file_handle->cur_id ++;
-            divoom_print("we will delete too large file: %d, %s, %s !\n", pnew_item[i].file_size, pnew_item[i].os_name, pnew_item[i].preview_os_name);
-            continue;
+            ++pdivoom_download_aliyun_file_handle->cur_id;
         }
-        if(pnew_item[i].photo_flag != pdivoom_download_aliyun_file_handle->photo_flag)
-        {
-            pdivoom_download_aliyun_file_handle->photo_flag = pnew_item[i].photo_flag;
-            pdivoom_download_aliyun_file_handle->total_num = pnew_item[i].photo_total;            
-            pdivoom_download_aliyun_file_handle->cur_id = 0;
-        }
-        pitem_info  = divoom_system_malloc(sizeof(divoom_download_aliyun_file_item));
-        if(pitem_info == NULL)
-        {
-            return;
-        }
-        download_files ++;
-        memcpy(pitem_info, &pnew_item[i], sizeof(divoom_download_aliyun_file_item));
-        pitem_info->fail_times = 0;
-        pitem_info->pcallback = pcallback;
-        divoom_queue_push(pdivoom_download_aliyun_file_handle->file_queue, pitem_info);
     }
-    if(init_flag && number < 100)
-    {
-        pdivoom_download_aliyun_file_handle->load_finish_flag = 1;
-    }
-    if(download_files)
-    {
-        divoom_main_push_model_event_id(DIVOOM_MODEL_LIGHT_APP, DIVOOM_LIGHT_APP_EVENT_APP_SEND_PHOTO);
-    }
-        
-    divoom_system_put_sem(pdivoom_download_aliyun_file_handle->wait_sem);
-        
+    divoom_download_aliyun_file_schedule_discard_poll(0, all_queued, init_flag);
+    /* An empty follow-up list confirms completion; no download or local deletion. */
 }

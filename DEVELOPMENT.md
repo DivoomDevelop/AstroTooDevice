@@ -169,7 +169,9 @@ app/my_feature.c
 | `divoom_http_client_upload_file()`、`divoom_http_client_upload_watchface_file()` | 返回 0；输出参数非 NULL 时清空首字节；不读文件、不联网。这里 0 表示上传未成功 |
 | SLS 日志上报 | SDK 提供无上传行为的兼容桩；不要按头文件中的通用说明认定已经发送 |
 | Musixmatch | 开源 LIB 编译为空实现，不提供在线查询、追踪或上报 |
-| OSS | 完整 HEAD/GET 只读功能由 SDK 静态库提供；公开 SRC 仅保留接口头文件与调用方，不包含实现或 KEY |
+| OSS | 实现与 AccessKey 已移除，下载/HEAD 兼容接口立即失败；收到当前设备下发照片任务时，通过 DIVOOM_NET_COMM_DELETE_ALI_PHOTO（Device/DelPhoto）逐项通知删除原图及预览图，不下载、不入下载队列、不删除本地相册。入队成功不等于服务器已完成删除，入队失败保留列表重取机会 |
+| YouTube 视频/频道 | 保留查询与统计显示，统一使用 https://appin.divoom-gz.com/Youtube/GetRawDataInfo（Type=2/3），不使用共享 Google API KEY 直连 |
+| Outlook 日历 | 保留原有初始化、运行时 token 配置、同步、菜单/表盘、缓存及四个协议命令；本次未发现硬编码 API KEY，不做功能禁用 |
 | 共享 AES | KEY、默认 IV 和相关实现由现有 LIB 提供；SRC 仅通过 divoom_aes 公共接口调用，不保留 KEY/IV 常量副本，不改协议或加解密行为 |
 | 百炼 / LyricFind | 无功能兼容桩，不联网；公开 SRC、SDK 和固件不含其凭据 |
 | `divoom_lan_share.c` 与 LAN 分享/关联删除入口 | 不交付实现，相关能力声明为关闭 |
@@ -191,7 +193,7 @@ app/my_feature.c
 
 源码级清理与二进制级清理是两件事。固定共用 AES 密钥、第三方 access key、OAuth secret 等即使移入静态库，仍可能随库和固件被提取。代码混淆、拆分字符串或改名不能作为共用凭据保密的保证。
 
-当前 OSS 使用用户已确认的只读凭据，完整实现编入 SDK 的 .a；公开 SRC/头文件不带实现或 KEY。该凭据可能在库/固件中被提取，只读权限由服务端策略控制。百炼、LyricFind 仍无功能且不交付凭据，Device/UploadLog 继续禁用。不将这项 OSS 例外扩展到其他生产密钥。
+OSS 的实际实现和凭据从开源版本移除；YouTube 视频/频道统一通过 Divoom 固定代理，不交付原 Google 直连 API KEY。Google 日历与 Outlook 保留原有运行时授权和正常功能。百炼、LyricFind 仍无功能且不交付凭据，Device/UploadLog 继续禁用；共享 AES 保持原库接口与行为。
 
 开发与发布规则：
 

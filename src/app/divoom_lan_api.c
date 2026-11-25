@@ -52,6 +52,8 @@ char *divoom_lan_dispatch(const char *json, int *handled) {
         divoom_cJSON_AddStringToObject(out, "LocalAssetUploadPath", "/upload_local_asset");
         divoom_cJSON_AddStringToObject(out, "UploadPersistence", "temporary-until-bound");
         divoom_cJSON_AddBoolToObject(out, "OutboundFileUpload", 0);
+        divoom_cJSON_AddBoolToObject(out, "SupportsOSS", 0);
+
         divoom_cJSON_AddBoolToObject(out, "SupportsClockShare", 0);
         divoom_cJSON_AddBoolToObject(out, "SupportsClockUploadVisibility", 0);
         divoom_cJSON_AddBoolToObject(out, "SupportsClockUpdateMessageInfo", 0);
@@ -86,7 +88,7 @@ char *divoom_lan_dispatch(const char *json, int *handled) {
     } else if(!strcmp(cmd, "Device/ShareLocalClock") ||
               !strcmp(cmd, "Device/DeleteLocalClock") ||
               !strcmp(cmd, "Channel/Upload_device_clock_info") ||
-              !strcmp(cmd, "Device/UploadLog")) {
+              (!strcmp(cmd, "Device/UploadLog"))) {
         result = divoom_watchface_local_http_error_json(cmd, "unsupported in open-source firmware");
     } else {
         /* 标准命令统一交给 divoom_net_app；本地专用命令才在此同步返回。 */
