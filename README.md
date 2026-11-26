@@ -44,12 +44,16 @@ TC="$PWD/toolchain/Xuantie-900-gcc-elf-newlib-x86_64-V3.3.0/bin"
 "$TC/riscv64-unknown-elf-gcc" --version
 ```
 
-### 3. Verify and build
+### 3. Build release or debug firmware
+
+Run either command from the repository root in Linux or WSL 2. Both verify the fixed SDK and toolchain, compile and link the application, and generate the flash image and matching symbol archive.
 
 ```bash
-bash build.sh --verify-only     # Verify the fixed SDK and toolchain
-bash build.sh --jobs 8          # Compile, link, validate, and package the application
+bash gerate_firmware.sh --jobs 8        # Release firmware with application error logs
+bash debug_gerate_firmware.sh --jobs 8  # Debug firmware with application state and debug logs
 ```
+
+Both modes write to the same output paths under `out/`; a new build replaces the previous outputs.
 
 After building, use the same toolchain to inspect the ELF architecture.
 
@@ -57,10 +61,17 @@ After building, use the same toolchain to inspect the ELF architecture.
 "$TC/riscv64-unknown-elf-readelf" -h out/rt_system.elf
 ```
 
-Additional build commands are available.
+To force a full application rebuild, use the corresponding firmware script:
 
 ```bash
-bash build.sh --rebuild --jobs 8 # Recompile the application against the prebuilt SDK
+bash gerate_firmware.sh --rebuild --jobs 8
+bash debug_gerate_firmware.sh --rebuild --jobs 8
+```
+
+For verification-only, partial builds, or cleanup, use the lower-level build entry point. The firmware scripts require a full build and packaging.
+
+```bash
+bash build.sh --verify-only     # Verify the fixed SDK and toolchain
 bash build.sh --no-pack         # Generate the ELF and BIN only
 bash build.sh --pack-only       # Package the existing out/rt_system.bin
 bash build.sh --clean           # Remove this project's build/ and out/ directories only
