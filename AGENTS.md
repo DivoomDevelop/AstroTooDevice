@@ -27,7 +27,7 @@
 
 ## 开源限制与安全
 
-- 保持 DEVELOPMENT.md 第 7 节的限制：指定上传函数空实现、SLS/Musixmatch 禁用、共享 AES KEY/IV 与实现仅在 LIB（保持加解密行为，SRC 无 KEY 副本）、OSS 实现/凭据移除、YouTube 固定代理且不带 Google KEY、Google 日历/Outlook 功能保留、百炼/LyricFind 无功能且无凭据、`Device/UploadLog` 禁用、LAN 分享移除、时钟上传命令拒绝、天气回调不向 Divoom 发指定回退请求、MQTT 主机规则。
+- 保持 DEVELOPMENT.md 第 7 节的限制：指定上传函数空实现、SLS/Musixmatch 禁用、全部网络取词（含 lrc.cx/LRCLIB 备用源及歌词缓存/上报命令）关闭，保留 UART/蓝牙歌词显示、共享 AES KEY/IV 与实现仅在 LIB（保持加解密行为，SRC 无 KEY 副本）、OSS 实现/凭据移除、YouTube 固定代理且不带 Google KEY、Google 日历/Outlook 功能保留、百炼/LyricFind 无功能且无凭据、`Device/UploadLog` 禁用、LAN 分享移除、时钟上传命令拒绝、天气回调不向 Divoom 发指定回退请求、MQTT 主机规则。
 - `DIVOOM_OPENSOURCE_SWITCH=1` 只由维护者用于编译 LIB，不能扩散到应用编译。
 - 不通过通用 HTTP/MQTT 或数字命令绕过被禁功能。保留公共声明不代表接口仍有功能。
 - 当前设备收到的 OSS 照片任务应发送 Device/DelPhoto 原图/预览删除通知并跳过下载；保留该服务器命令，不清空 Bucket、不删除本地相册，不把入队成功当作云端删除完成。

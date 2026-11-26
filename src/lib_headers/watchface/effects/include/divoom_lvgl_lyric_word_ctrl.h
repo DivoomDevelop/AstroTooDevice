@@ -1,14 +1,15 @@
 #ifndef _divoom_lvgl_lyric_word_ctrl_h_
 #define _divoom_lvgl_lyric_word_ctrl_h_
 
-/** 1：禁用 lrclib/lrc.cx 网络拉词，仅用 UART 0x04 歌词（type=1 逐句，type=2 歌名）。
- *  编译时可 -DDIVOOM_LYRIC_USE_UART_ONLY=0 恢复网络拉词。 */
+/** Compatibility setting for UART lyrics (type=1: line, type=2: title).
+ *  Network lyrics retrieval is unavailable in the open-source SDK,
+ *  regardless of this macro's value. */
 #ifndef DIVOOM_LYRIC_USE_UART_ONLY
 #define DIVOOM_LYRIC_USE_UART_ONLY  1
 #endif
 
 void *divoom_lvgl_lyric_word_ctrl_init(void *main_obj);
-/** 仅网络拉词：不创建字体、特效、背景视频。给表盘歌词用。 */
+/** Compatibility fetch handle without UI; network retrieval is unavailable. */
 void *divoom_lvgl_lyric_word_ctrl_init_fetch(void);
 void divoom_lvgl_lyric_word_ctrl_add_word(void *handle, char *music_name);
 /** 按播放毫秒查当前句和上一句，不触发 add_word。命中当前句返回 1。 */
@@ -21,13 +22,13 @@ void divoom_lvgl_lyric_word_ctrl_reset_calib(void *handle, uint32_t old_pos, uin
 /** 清空当前歌词特效层上的行（须在 LVGL 线程调用；蓝牙切歌见 lyric_effect 内标志） */
 void divoom_lvgl_lyric_word_ctrl_clear_disp_lines(void *handle);
 
-/** 设置当前歌曲：artist/track/album/duration_sec；开源版 LyricFind/Musixmatch 已禁用，不向这两个服务在线取词。 */
+/** Update song metadata; all network lyrics retrieval is disabled in the open-source SDK. */
 void divoom_lvgl_lyric_word_ctrl_set_artist_track(void *handle, const char *artist_name, const char *track_name,
     const char *album_name, int duration_sec);
 
 /** 传入当前播放时间（秒），根据已拉取的歌词时间表查当前行并触发 add_word 更新显示 */
 void divoom_lvgl_lyric_word_ctrl_set_playback_time(void *handle, float time_sec);
-/** 获取最近一次拉词状态：state(0=unknown 1=ok -1=failed), ver(状态变化计数) */
+/** Fetch status: open-source SDK returns state=-1 (unavailable); ver counts metadata changes. */
 void divoom_lvgl_lyric_word_ctrl_get_fetch_state(void *handle, int *state, int *ver);
 /** 切歌后丢掉上一首歌词表并作废进行中的请求，不发新的取词。总时长到了再 set_artist_track。 */
 void divoom_lvgl_lyric_word_ctrl_drop_song(void *handle);

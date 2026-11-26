@@ -104,7 +104,7 @@ Add new C/C++ source files to `app_sources.txt`. Keep shared interfaces compatib
 ## Feature Limitations
 
 - OSS cloud photo/video transfer is disabled because its API keys cannot be publicly redistributed. **When the device and app are not on the same LAN, cloud delivery of photos and videos is unavailable.**
-- Synchronized lyrics functionality is limited in this open-source build.
+- Network-based lyrics retrieval, including synchronized lyrics and fallback online sources, is unavailable.
 
 ## Licenses
 

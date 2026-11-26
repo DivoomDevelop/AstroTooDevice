@@ -173,6 +173,7 @@ app/my_feature.c
 | YouTube 视频/频道 | 保留查询与统计显示，统一使用 https://appin.divoom-gz.com/Youtube/GetRawDataInfo（Type=2/3），不使用共享 Google API KEY 直连 |
 | Outlook 日历 | 保留原有初始化、运行时 token 配置、同步、菜单/表盘、缓存及四个协议命令；本次未发现硬编码 API KEY，不做功能禁用 |
 | 共享 AES | KEY、默认 IV 和相关实现由现有 LIB 提供；SRC 仅通过 divoom_aes 公共接口调用，不保留 KEY/IV 常量副本，不改协议或加解密行为 |
+| 网络取词 | 所有在线歌词及备用源均不可用；兼容接口立即返回不可用，不发起 HTTP/MQTT、查询或上报；UART/蓝牙歌词显示不受此限制 |
 | 百炼 / LyricFind | 无功能兼容桩，不联网；公开 SRC、SDK 和固件不含其凭据 |
 | `divoom_lan_share.c` 与 LAN 分享/关联删除入口 | 不交付实现，相关能力声明为关闭 |
 | `DIVOOM_NET_COMM_DEVICE_UPDATE_CLOCK_INFO` | 保留枚举占位；字符串路由、数字命令、打包与发送均拒绝，不得改编号绕过 |

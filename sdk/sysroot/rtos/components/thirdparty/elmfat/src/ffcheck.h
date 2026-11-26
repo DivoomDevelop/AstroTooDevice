@@ -14,7 +14,8 @@ enum { FF_CHECK_CROSS_LINK=1U, FF_CHECK_CYCLE=2U, FF_CHECK_INVALID_LINK=4U,
        FF_CHECK_FILE_SIZE=64U, FF_CHECK_LFN=128U };
 enum { FF_CHECK_STAGE_FAT=1, FF_CHECK_STAGE_DIRECTORY=2, FF_CHECK_STAGE_OWNERS=3,
        FF_CHECK_STAGE_VERIFY=4 };
-enum { FF_CHECK_DETACH_PENDING=1, FF_CHECK_FREE_PENDING=2, FF_CHECK_ORPHAN_PENDING=3 };
+enum { FF_CHECK_DETACH_PENDING=1, FF_CHECK_FREE_PENDING=2, FF_CHECK_ORPHAN_PENDING=3,
+       FF_CHECK_PATCH_PENDING=4, FF_CHECK_GROUP_PENDING=5 };
 
 typedef struct {
     uint32_t serial, fat_type, sector_size, cluster_sectors;
@@ -30,8 +31,23 @@ typedef struct {
     ff_check_geometry geometry;
     uint32_t damage_flags, files, directories, affected_files, orphan_clusters;
     uint32_t cross_links, cycles, complete, unsafe, plan_complete, fs_error;
+    uint32_t batch_files; /* Valid entries returned by a bounded group proposal. */
     uint32_t screen_only; /* Online result never authorizes a deletion plan. */
 } ff_check_result;
+#define FF_CHECK_PATCH_MAX 4096U
+enum { FF_CHECK_PATCH_DIRECTORY=1, FF_CHECK_PATCH_MIRROR=2 };
+typedef struct {
+    ff_check_geometry geometry;
+    uint32_t kind, parent_cluster, entry_offset, fat_sector, source_fat;
+    uint8_t identity[32];
+    uint8_t before[FF_CHECK_PATCH_MAX], after[FF_CHECK_PATCH_MAX];
+} ff_check_patch;
+enum { FF_CHECK_GROUP_ACTIVE=1U, FF_CHECK_GROUP_IDENTITY=2U };
+typedef struct {
+    ff_check_geometry geometry;
+    uint32_t seed_cluster, flags;
+    ff_check_entry identity;
+} ff_check_group;
 typedef void (*ff_check_progress)(uint32_t stage, uint32_t done, uint32_t total, void *context);
 /* Callback must only commit a raw, independent journal; never call VFS/FatFs.
  * Return 1 only after durable phase commit, 0 to stop without that phase. */
@@ -49,6 +65,32 @@ int f_screen_volume(const char *drive, ff_check_result *result,
  * the caller must recheck the volume before retiring the journal phase. */
 int f_reclaim_orphans(const char *drive, const ff_check_geometry *geometry, int resume,
     ff_check_result *result, ff_check_progress progress, ff_check_commit commit, void *context);
+/* Read-only metadata proposal. Initialize patch to zero for a new repair.
+ * CLEAN means no provable patch; STRUCTURAL + kind means one patch proposed.
+ * To continue a MIRROR repair, pass the last durably logged and applied patch:
+ * its target/source identities preserve authority across multiple sectors.
+ * Never guesses between two viable FAT copies without this durable proof. */
+int f_check_repair_next(const char *drive, ff_check_result *result,
+    ff_check_patch *patch, ff_check_progress progress, void *context);
+/* Only apply a proposal produced by repair_next, or its CRC-verified journal
+ * replay. Commit PATCH_PENDING must persist/read back it entirely before I/O.
+ * resume permits idempotent replay of its before/after sector identity.
+ * Every successful write is synced and read back against the after-image. */
+int f_check_repair_apply(const char *drive, const ff_check_patch *patch, int resume,
+    ff_check_result *result, ff_check_commit commit, void *context);
+/* A zeroed group selects a bad-file seed. ACTIVE resumes the same seed with
+ * unchanged FAT; all intersecting owners (including otherwise good files) are
+ * returned, bounded by capacity. result.batch_files is the valid entry count.
+ * CLEAN + batch_files=0 ends this group, never the whole-volume transaction. */
+int f_check_group_next(const char *drive, ff_check_group *group,
+    ff_check_entry *entries, uint32_t capacity, ff_check_result *result,
+    ff_check_progress progress, void *context);
+/* Detach only; never free/allocate FAT entries. GROUP_PENDING durably commits
+ * the stable group plus this exact batch before the first directory write.
+ * After all owners are detached, reclaim unreferenced clusters separately. */
+int f_check_group_detach(const char *drive, const ff_check_group *group,
+    const ff_check_entry *entries, uint32_t count, int resume,
+    ff_check_result *result, ff_check_commit commit, void *context);
 /* VFS calls this only when disposing an FD after failed f_close. */
 void f_check_forget_file(void *file);
 /* Does not mount/read the medium; checks all FIL/FF_DIR lifetimes under lock. */

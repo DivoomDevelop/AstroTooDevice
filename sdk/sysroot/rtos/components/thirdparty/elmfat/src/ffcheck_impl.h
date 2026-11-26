@@ -12,6 +12,7 @@
 #define CK_SCAN 1
 #define CK_COLLECT 2
 #define CK_VERIFY 3
+#define CK_GROUP 4
 #define CK_NONE 0xffffffffU
 
 #if FF_FS_REENTRANT
@@ -21,7 +22,7 @@
 #endif
 typedef struct {
     FF_DIR dir;
-    DWORD cluster, parent, lfn_start;
+    DWORD cluster, parent, lfn_start, lfn_end;
     BYTE lfn_ord, lfn_sum, lfn_bad, lfn_length, dot_mask, ended, root;
     WCHAR lfn[260];
 } CK_DIR;
@@ -187,6 +188,13 @@ typedef struct {
     void *context;
     int error, mode, foreign, unsafe, mirror_enabled, screen, live_writers, live_file;
     unsigned diagnostics;
+    int (*visitor)(void *, DWORD, DWORD, DWORD, DWORD, DWORD, const BYTE *, int);
+    void *visitor_context;
+    ff_check_patch *patch;
+    const ff_check_patch *verify_patch;
+    int repair_scan, patch_verified, directory_uncertain;
+
+
 } CK_CTX;
 
 __attribute__((weak)) int ff_check_write_allowed(uint8_t drive)
@@ -456,7 +464,7 @@ static DWORD ck_walk(CK_CTX *c, DWORD start, DWORD size, int directory)
                 reason |= FF_CHECK_CROSS_LINK;
                 break;
             }
-        } else {
+        } else if (c->mode == CK_VERIFY) {
             if (c->foreign && ck_bit(c->duplicate, cl))
                 c->unsafe = 1;
             if (ck_bit(c->owned, cl) && !ck_bit(c->duplicate, cl))
@@ -584,6 +592,55 @@ static int ck_sfn_valid(const BYTE *e)
     }
     return 1;
 }
+/* Propose one directory identity at a time. A sector record keeps unrelated
+ * bytes exact; only a single 32-byte entry can differ in this patch kind. */
+static int ck_patch_entry(CK_CTX *c,DWORD parent,DWORD offset,const BYTE *before,const BYTE *after)
+{
+    FF_DIR dir;
+    FRESULT res;
+    if(!memcmp(before,after,32))return 0;
+    if(c->verify_patch) {
+        const ff_check_patch *p=c->verify_patch;
+        if(parent==p->parent_cluster && offset==p->entry_offset &&
+                !memcmp(before,p->identity,32) &&
+                !memcmp(after,p->after+offset%SS(c->fs),32))c->patch_verified=1;
+        return 0;
+    }
+    if(!c->patch || c->patch->kind)return 0;
+    memset(&dir,0,sizeof(dir));dir.obj.fs=c->fs;dir.obj.id=c->fs->id;dir.obj.sclust=parent;
+    res=dir_sdi(&dir,offset);
+    if(res!=FR_OK)return ck_io(c,res);
+    if(disk_read(c->fs->pdrv,c->scratch,dir.sect,1)!=RES_OK)return ck_io(c,FR_DISK_ERR);
+    ff_check_patch *p=c->patch;
+    memset(p,0,sizeof(*p));p->geometry=c->out->geometry;p->kind=FF_CHECK_PATCH_DIRECTORY;
+    p->parent_cluster=parent;p->entry_offset=offset;memcpy(p->identity,before,32);
+    memcpy(p->before,c->scratch,SS(c->fs));memcpy(p->after,p->before,SS(c->fs));
+    memcpy(p->after+offset%SS(c->fs),after,32);
+    return 0;
+}
+static int ck_patch_lfn(CK_CTX *c,DWORD parent,DWORD begin,DWORD end)
+{
+    for(DWORD offset=begin;offset<end;offset+=32) {
+        FF_DIR dir;BYTE before[32],after[32];FRESULT res;
+        memset(&dir,0,sizeof(dir));dir.obj.fs=c->fs;dir.obj.id=c->fs->id;dir.obj.sclust=parent;
+        res=dir_sdi(&dir,offset);if(res!=FR_OK)return ck_io(c,res);
+        res=move_window(c->fs,dir.sect);if(res!=FR_OK)return ck_io(c,res);
+        memcpy(before,c->fs->win+dir.dptr%SS(c->fs),32);
+        if(c->verify_patch && parent==c->verify_patch->parent_cluster && offset==c->verify_patch->entry_offset)
+            memcpy(before,c->verify_patch->identity,32);
+        if(before[0]==0 || before[0]==DDEM || before[DIR_Attr]!=AM_LFN)continue;
+        memcpy(after,before,32);after[0]=DDEM;
+        if(ck_patch_entry(c,parent,offset,before,after))return c->error;
+    }
+    return 0;
+}
+static int ck_dot_name(const BYTE *entry,int dot)
+{
+    UINT i;
+    if(entry[0]!='.' || entry[1]!=(dot?' ':'.'))return 0;
+    for(i=dot?1U:2U;i<11;i++)if(entry[i]!=' ')return 0;
+    return 1;
+}
 static int ck_tree(CK_CTX *c)
 {
     UINT depth = 0;
@@ -596,10 +653,13 @@ static int ck_tree(CK_CTX *c)
         reason = ck_walk(c, c->fs->dirbase, 0, 1);
         if (reason) {
             c->out->damage_flags |= reason | FF_CHECK_DIRECTORY;
-            c->out->unsafe = 1;
+            c->out->unsafe = 1;c->directory_uncertain=1;
             return 0;
         }
     }
+    if (c->visitor && c->visitor(c->visitor_context, 0, CK_NONE, CK_NONE,
+            c->fs->fs_type == FS_FAT32 ? c->fs->dirbase : 0, 0, 0, 1))
+        return c->error ? c->error : FF_CHECK_STRUCTURAL;
     if (ck_init_dir(c, &c->stack[0], 0, 0, 1))
         return c->error;
     for (;;) {
@@ -608,10 +668,12 @@ static int ck_tree(CK_CTX *c)
         DWORD offset, first, size, lfn, base_reason = 0;
         if (d->ended || d->dir.sect == 0) {
             if (d->lfn_start != CK_NONE) {
+                if(c->repair_scan && ck_patch_lfn(c,d->cluster,d->lfn_start,d->lfn_end))return c->error;
                 c->out->damage_flags |= FF_CHECK_LFN | FF_CHECK_DIRECTORY;
                 c->out->unsafe = 1;
             }
             if (!d->root && d->dot_mask != 3) {
+                c->directory_uncertain=1;
                 c->out->damage_flags |= FF_CHECK_DIRECTORY;
                 c->out->unsafe = 1;
             }
@@ -625,6 +687,8 @@ static int ck_tree(CK_CTX *c)
             return ck_io(c, res);
         memcpy(e, c->fs->win + d->dir.dptr % SS(c->fs), 32);
         offset = d->dir.dptr;
+        if(c->verify_patch && d->cluster==c->verify_patch->parent_cluster && offset==c->verify_patch->entry_offset)
+            memcpy(e,c->verify_patch->identity,32);
         res = dir_next(&d->dir, 0);
         if (res == FR_NO_FILE)
             d->ended = 1;
@@ -635,13 +699,22 @@ static int ck_tree(CK_CTX *c)
             continue;
         }
         if (e[0] == DDEM) {
+            if(c->repair_scan && d->lfn_start!=CK_NONE && ck_patch_lfn(c,d->cluster,d->lfn_start,offset))return c->error;
             d->lfn_start = CK_NONE;
             d->lfn_bad = 0;
             d->lfn_ord = 0;
             continue;
         }
         attr = e[DIR_Attr];
+        if(c->repair_scan && !d->root && (offset==0 || offset==32) && ck_dot_name(e,offset==0)) {
+            BYTE after[32];DWORD expected=offset==0?d->cluster:d->parent;
+            memcpy(after,e,32);after[DIR_Attr]=AM_DIR;
+            st_clust(c->fs,after,expected);st_dword(after+DIR_FileSize,0);
+            if(ck_patch_entry(c,d->cluster,offset,e,after))return c->error;
+            memcpy(e,after,32);attr=e[DIR_Attr];
+        }
         if (attr == AM_LFN) {
+            d->lfn_end=offset+32;
             BYTE ord = e[0] & 0x1f;
             if (d->lfn_start == CK_NONE) {
                 d->lfn_start = offset;
@@ -664,8 +737,10 @@ static int ck_tree(CK_CTX *c)
             continue;
         }
         lfn = d->lfn_start;
-        if (lfn != CK_NONE && (d->lfn_bad || d->lfn_ord || d->lfn_sum != ck_sum(e) || !ck_lfn_valid(d)))
+        if (lfn != CK_NONE && (d->lfn_bad || d->lfn_ord || d->lfn_sum != ck_sum(e) || !ck_lfn_valid(d))) {
             base_reason |= FF_CHECK_LFN;
+            if(c->repair_scan && ck_patch_lfn(c,d->cluster,lfn,offset))return c->error;
+        }
         d->lfn_start = CK_NONE;
         d->lfn_bad = 0;
         d->lfn_ord = 0;
@@ -677,12 +752,19 @@ static int ck_tree(CK_CTX *c)
             if (d->root || !(attr & AM_DIR) || size || first != expected || offset != (dot ? 0U : 32U)) {
                 c->out->damage_flags |= FF_CHECK_DIRECTORY;
                 c->out->unsafe = 1;
+                if(c->repair_scan && !d->root && ck_dot_name(e,dot) && offset==(dot?0U:32U)) {
+                    BYTE after[32];memcpy(after,e,32);after[DIR_Attr]=AM_DIR;
+                    st_clust(c->fs,after,expected);st_dword(after+DIR_FileSize,0);
+                    if(ck_patch_entry(c,d->cluster,offset,e,after))return c->error;
+                    d->dot_mask|=(BYTE)(dot?1:2);
+                } else c->directory_uncertain=1;
             } else
                 d->dot_mask |= (BYTE)(dot ? 1 : 2);
             continue;
         }
         if (attr & AM_VOL) {
             if ((attr & AM_DIR) || size || first) {
+                c->directory_uncertain=1;
                 c->out->damage_flags |= FF_CHECK_DIRECTORY;
                 c->out->unsafe = 1;
             }
@@ -694,8 +776,22 @@ static int ck_tree(CK_CTX *c)
             if (c->mode == CK_SCAN)
                 c->out->directories++;
             c->foreign = 1;
-            reason = ck_walk(c, first, 0, 1) | base_reason;
+            if(c->repair_scan && !(attr&0xc0) && (first<2 || first>=c->fs->n_fatent)) {
+                BYTE after[32];memcpy(after,e,32);after[0]=DDEM;
+                if(lfn!=CK_NONE && ck_patch_lfn(c,d->cluster,lfn,offset))return c->error;
+                if(ck_patch_entry(c,d->cluster,offset,e,after))return c->error;
+                c->out->damage_flags|=FF_CHECK_DIRECTORY;
+                continue; /* No valid child chain exists; never infer children. */
+            }
+            reason = ck_walk(c, first, 0, 1) |
+                (c->repair_scan && ck_sfn_valid(e) && !(attr&0xc0)?0:base_reason);
+            if(c->repair_scan && size && !reason) {
+                BYTE after[32];memcpy(after,e,32);st_dword(after+DIR_FileSize,0);
+                if(ck_patch_entry(c,d->cluster,offset,e,after))return c->error;
+                size=0;
+            }
             if (size || reason) {
+                c->directory_uncertain=1;
                 if (c->mode == CK_SCAN)
                     ck_diagnostic(c, d->cluster, offset, first, reason | FF_CHECK_DIRECTORY);
                 c->out->damage_flags |= reason | FF_CHECK_DIRECTORY;
@@ -706,6 +802,8 @@ static int ck_tree(CK_CTX *c)
                 c->error = FF_CHECK_UNSUPPORTED;
                 return c->error;
             }
+            if (c->visitor && c->visitor(c->visitor_context, d->cluster, offset, lfn, first, size, e, 1))
+                return c->error ? c->error : FF_CHECK_STRUCTURAL;
             depth++;
             if (ck_init_dir(c, &c->stack[depth], first, d->cluster, 0))
                 return c->error;
@@ -723,6 +821,8 @@ static int ck_tree(CK_CTX *c)
                 c->out->damage_flags |= reason;
             if (c->mode == CK_VERIFY && base_reason && c->foreign)
                 c->unsafe = 1;
+            if (c->visitor && c->visitor(c->visitor_context, d->cluster, offset, lfn, first, size, e, 0))
+                return c->error ? c->error : FF_CHECK_STRUCTURAL;
             if (c->mode == CK_COLLECT && reason) {
                 ck_diagnostic(c, d->cluster, offset, first, reason);
                 DWORD index = c->out->affected_files++;
@@ -920,6 +1020,46 @@ static BYTE ck_orphan_mask(CK_CTX *c, DWORD offset)
     if (cl < 2 || cl >= c->fs->n_fatent || !ck_bit(c->duplicate, cl)) return 0;
     return c->fs->fs_type == FS_FAT32 && (offset & 3U) == 3U ? 0x0fU : 0xffU;
 }
+/* FAT32 FSInfo is an optional allocation hint, not ownership evidence. Raw
+ * reclamation invalidates both known counters; never publish a guessed count
+ * or create an FSInfo sector where no valid structure already exists. */
+static int ck_orphan_fsinfo(CK_CTX *c)
+{
+    FATFS *fs=c->fs;
+    DWORD offsets[2],reserved,info,backup;
+    if(fs->fs_type!=FS_FAT32)return 0;
+    fs->free_clst=fs->last_clst=0xffffffffU;
+    fs->winsect=(DWORD)0-1U;
+    if(disk_read(fs->pdrv,c->scratch,fs->volbase,1)!=RES_OK)return ck_io(c,FR_DISK_ERR);
+    reserved=ld_word(c->scratch+BPB_RsvdSecCnt);
+    info=ld_word(c->scratch+BPB_FSInfo32);
+    backup=ld_word(c->scratch+BPB_BkBootSec32);
+    if(!info || info==0xffffU || info>=reserved)return 0;
+    offsets[0]=info;offsets[1]=0;
+    if(backup && backup!=0xffffU && backup<reserved && backup+info<reserved)
+        offsets[1]=backup+info;
+    for(UINT copy=0;copy<2;copy++) {
+        DWORD offset=offsets[copy],address;
+        if(!offset || offset>0xffffffffU-fs->volbase)continue;
+        address=fs->volbase+offset;
+        if(disk_read(fs->pdrv,c->scratch,address,1)!=RES_OK)return ck_io(c,FR_DISK_ERR);
+        if(ld_word(c->scratch+BS_55AA)!=0xaa55 ||
+                ld_dword(c->scratch+FSI_LeadSig)!=0x41615252 ||
+                ld_dword(c->scratch+FSI_StrucSig)!=0x61417272)continue;
+        if(ld_dword(c->scratch+FSI_Free_Count)==0xffffffffU &&
+                ld_dword(c->scratch+FSI_Nxt_Free)==0xffffffffU)continue;
+        st_dword(c->scratch+FSI_Free_Count,0xffffffffU);
+        st_dword(c->scratch+FSI_Nxt_Free,0xffffffffU);
+        /* Preserve all signatures, reserved bytes and sector padding. */
+        if(disk_write(fs->pdrv,c->scratch,address,1)!=RES_OK ||
+                disk_ioctl(fs->pdrv,CTRL_SYNC,0)!=RES_OK)return ck_io(c,FR_DISK_ERR);
+        c->cache_sector=CK_NONE;
+        if(disk_read(fs->pdrv,c->cache,address,1)!=RES_OK ||
+                memcmp(c->cache,c->scratch,SS(fs)))return ck_io(c,FR_DISK_ERR);
+    }
+    fs->fsi_flag&=0x80; /* No dirty cached count may overwrite the durable unknown hint. */
+    return 0;
+}
 int f_reclaim_orphans(const char *drive, const ff_check_geometry *geometry, int resume,
                      ff_check_result *out, ff_check_progress progress, ff_check_commit commit,
                      void *context)
@@ -950,12 +1090,12 @@ int f_reclaim_orphans(const char *drive, const ff_check_geometry *geometry, int 
     /* Never infer ownership from a broken directory or referenced chain. */
     if (!status && out->damage_flags) status = FF_CHECK_STRUCTURAL;
     if (!status) status = ck_all_fat(&c, 0);
-    if (!status && (out->damage_flags & ~(FF_CHECK_ORPHAN |
-            (resume ? FF_CHECK_INVALID_LINK : 0U)))) status = FF_CHECK_STRUCTURAL;
+    if (!status && (out->damage_flags & ~(FF_CHECK_ORPHAN | FF_CHECK_INVALID_LINK))) status = FF_CHECK_STRUCTURAL;
     if (!status) status = ck_orphan_plan(&c, resume);
     for (cl = 2; !status && cl < fs->n_fatent; ++cl)
         if (ck_bit(c.duplicate, cl)) ++count;
-    if (!status && count && !commit(FF_CHECK_ORPHAN_PENDING, context))
+    if (!status && (count || (resume && fs->fs_type==FS_FAT32)) &&
+            !commit(FF_CHECK_ORPHAN_PENDING, context))
         status = FF_CHECK_IO; /* The independent journal is not target-volume I/O. */
     for (sector = 0; !status && count && sector < c.used_fat_sectors; ++sector) {
         UINT copy, copies = c.mirror_enabled ? 2U : 1U;
@@ -986,6 +1126,21 @@ int f_reclaim_orphans(const char *drive, const ff_check_geometry *geometry, int 
      * A no-op resume must still make those earlier writes durable. */
     if (!status && (count || resume) && disk_ioctl(fs->pdrv, CTRL_SYNC, 0) != RES_OK)
         status = ck_io(&c, FR_DISK_ERR);
+    /* CTRL_SYNC success alone cannot prove the medium retained the clear. */
+    for (sector=0; !status && count && sector<c.used_fat_sectors; sector++) {
+        UINT copies=c.mirror_enabled?2U:1U;
+        for(UINT copy=0;!status && copy<copies;copy++) {
+            if(disk_read(fs->pdrv,c.scratch,fs->fatbase+copy*fs->fsize+sector,1)!=RES_OK) {
+                status=ck_io(&c,FR_DISK_ERR);break;
+            }
+            for(UINT i=0;i<SS(fs);i++)if(c.scratch[i]&ck_orphan_mask(&c,sector*SS(fs)+i)) {
+                status=ck_io(&c,FR_DISK_ERR);break;
+            }
+        }
+    }
+    /* Resume also repairs a hint left stale after the final FAT write. The
+     * same durable ORPHAN_PENDING checkpoint covers these idempotent hints. */
+    if(!status && (count || resume))status=ck_orphan_fsinfo(&c);
     if (!status) {
         out->damage_flags = out->unsafe = 0;
         out->orphan_clusters = count;
@@ -1018,10 +1173,11 @@ static int ck_plan_entry(CK_CTX *c, const ff_check_entry *item, FF_DIR *d, int *
         if (memcmp(entry + 1, item->original + 1, 31))
             return FF_CHECK_STRUCTURAL;
         *present = 0;
-        return 0;
+    } else {
+        if (memcmp(entry, item->original, 32) || (entry[DIR_Attr] & AM_DIR))
+            return FF_CHECK_STRUCTURAL;
+        *present = 1;
     }
-    if (memcmp(entry, item->original, 32) || (entry[DIR_Attr] & AM_DIR))
-        return FF_CHECK_STRUCTURAL;
     if (item->lfn_offset != CK_NONE) {
         DWORD offset;
         FF_DIR part;
@@ -1040,7 +1196,6 @@ static int ck_plan_entry(CK_CTX *c, const ff_check_entry *item, FF_DIR *d, int *
                 return FF_CHECK_STRUCTURAL;
         }
     }
-    *present = 1;
     return 0;
 }
 static int ck_detach(CK_CTX *c, const ff_check_entry *item)
@@ -1173,4 +1328,393 @@ int f_delete_corrupt_batch(const char *drive, const ff_check_geometry *geometry,
     ck_release(&c);
     ck_unlock(fs);
     return status;
+}
+
+
+/* A group never changes FAT. The persisted seed therefore still describes the
+ * complete original chain after any number of directory-only batches. */
+#define CK_GROUP_MAX 240U
+typedef struct {
+    CK_CTX *c;
+    const ff_check_group *group;
+    const ff_check_entry *plan;
+    DWORD plan_count;
+    BYTE seen[CK_GROUP_MAX], parents[CK_GROUP_MAX];
+} CK_GROUP_VISIT;
+static int ck_group_chain(CK_CTX *c, DWORD first, int build)
+{
+    DWORD cl=first;
+    int hit=0;
+    memset(c->local,0,c->map_bytes);
+    while(cl>=2 && cl<c->fs->n_fatent && !ck_bit(c->local,cl)) {
+        DWORD next;
+        ck_set(c->local,cl);
+        if(build)ck_set(c->duplicate,cl);
+        else if(ck_bit(c->duplicate,cl))hit=1;
+        next=ck_fat(c,cl);
+        if(c->error)return -1;
+        if(next<2 || next>=c->fs->n_fatent || next>=ck_eoc(c) || next==ck_bad(c))break;
+        cl=next;
+    }
+    return hit;
+}
+static int ck_group_visit(void *opaque,DWORD parent,DWORD offset,DWORD lfn,
+    DWORD first,DWORD size,const BYTE *entry,int directory)
+{
+    CK_GROUP_VISIT *v=opaque;
+    CK_CTX *c=v->c;
+    DWORD i;
+    int hit;
+    (void)size;
+    if(directory) {
+        DWORD cluster=entry?first:0;
+        for(i=0;i<v->plan_count;i++)
+            if(v->plan[i].parent_cluster==cluster)v->parents[i]=1;
+        if(!(v->group->flags&FF_CHECK_GROUP_IDENTITY) && ck_group_chain(c,first,0))
+            return FF_CHECK_STRUCTURAL;
+        return c->error;
+    }
+    hit=(v->group->flags&FF_CHECK_GROUP_IDENTITY)?
+        parent==v->group->identity.parent_cluster && offset==v->group->identity.entry_offset &&
+        !memcmp(entry,v->group->identity.original,32):ck_group_chain(c,first,0);
+    if(c->error)return c->error;
+    for(i=0;i<v->plan_count;i++)
+        if(parent==v->plan[i].parent_cluster && offset==v->plan[i].entry_offset) {
+            if(!hit || memcmp(entry,v->plan[i].original,32))return FF_CHECK_STRUCTURAL;
+            v->seen[i]=1;
+        }
+    if(hit) {
+        DWORD index=c->out->affected_files++;
+        if(c->entries && index<c->capacity) {
+            ff_check_entry *item=&c->entries[index];
+            memset(item,0,sizeof(*item));item->parent_cluster=parent;item->entry_offset=offset;
+            item->lfn_offset=lfn;item->reason=FF_CHECK_CROSS_LINK;
+            memcpy(item->original,entry,32);
+            c->out->batch_files++;
+        }
+    }
+    return 0;
+}
+static int ck_group_proof(CK_CTX *c)
+{
+    int status;
+    c->mode=CK_SCAN;
+    status=ck_mirrors(c);
+    if(!status)status=ck_tree(c);
+    if(!status && (c->out->damage_flags&(FF_CHECK_DIRECTORY|FF_CHECK_MIRROR)))
+        status=FF_CHECK_STRUCTURAL;
+    /* Unreferenced chains stay allocated until all directory groups finish. */
+    return status;
+}
+int f_check_group_next(const char *drive,ff_check_group *group,ff_check_entry *entries,
+    uint32_t capacity,ff_check_result *out,ff_check_progress progress,void *context)
+{
+    FATFS *fs=0;
+    CK_CTX c;
+    CK_GROUP_VISIT visit;
+    ff_check_entry seed;
+    int status;
+    if(!group || !out || !entries || !capacity || capacity>CK_GROUP_MAX)return FF_CHECK_UNSUPPORTED;
+    memset(out,0,sizeof(*out));status=ck_open(drive,&fs);
+    if(status){if(fs)ck_unlock(fs);return status;}
+    status=ck_setup(&c,fs,out,0);
+    if(!status && (ff_check_write_allowed(fs->pdrv)||ck_any_open(fs)))status=FF_CHECK_BUSY;
+    if(!status)status=ck_geometry(&c);
+    if(!status && (group->flags&FF_CHECK_GROUP_ACTIVE) && memcmp(&group->geometry,&out->geometry,sizeof(group->geometry)))status=FF_CHECK_STRUCTURAL;
+    c.progress=progress;c.context=context;
+    if(!status)status=ck_group_proof(&c);
+    if(!status && !(group->flags&FF_CHECK_GROUP_ACTIVE)) {
+        c.mode=CK_COLLECT;c.entries=&seed;c.capacity=1;out->plan_complete=1;
+        status=ck_tree(&c);
+        if(!status && out->affected_files) {
+            memset(group,0,sizeof(*group));group->geometry=out->geometry;group->identity=seed;
+            group->seed_cluster=ld_clust(fs,seed.original);group->flags=FF_CHECK_GROUP_ACTIVE;
+            if(group->seed_cluster<2 || group->seed_cluster>=fs->n_fatent) {
+                group->seed_cluster=0;group->flags|=FF_CHECK_GROUP_IDENTITY;
+            }
+        }
+    }
+    if(!status && (group->flags&FF_CHECK_GROUP_ACTIVE)) {
+        memset(c.duplicate,0,c.map_bytes);
+        if(!(group->flags&FF_CHECK_GROUP_IDENTITY))ck_group_chain(&c,group->seed_cluster,1);
+        if(c.error)status=c.error;
+        memset(&visit,0,sizeof(visit));visit.c=&c;visit.group=group;
+        c.mode=CK_GROUP;c.entries=entries;c.capacity=capacity;c.visitor=ck_group_visit;c.visitor_context=&visit;
+        out->affected_files=out->batch_files=0;
+        if(!status)status=ck_tree(&c);
+    }
+    if(!status) {
+        out->complete=1;out->plan_complete=out->affected_files==out->batch_files;
+        status=out->batch_files?FF_CHECK_STRUCTURAL:FF_CHECK_CLEAN;
+    }
+    ck_release(&c);ck_unlock(fs);return status;
+}
+int f_check_group_detach(const char *drive,const ff_check_group *group,
+    const ff_check_entry *entries,uint32_t count,int resume,ff_check_result *out,
+    ff_check_commit commit,void *context)
+{
+    FATFS *fs=0;
+    CK_CTX c;
+    CK_GROUP_VISIT visit;
+    DWORD i,j;
+    int status,present;
+    FF_DIR dir;
+    if(!group || !(group->flags&FF_CHECK_GROUP_ACTIVE) || !entries || !out || !commit || !count || count>CK_GROUP_MAX)
+        return FF_CHECK_UNSUPPORTED;
+    memset(out,0,sizeof(*out));status=ck_open(drive,&fs);
+    if(status){if(fs)ck_unlock(fs);return status;}
+    status=ck_setup(&c,fs,out,0);
+    if(!status && (ff_check_write_allowed(fs->pdrv)||ck_any_open(fs)))status=FF_CHECK_BUSY;
+    if(!status)status=ck_geometry(&c);
+    if(!status && memcmp(&group->geometry,&out->geometry,sizeof(group->geometry)))status=FF_CHECK_STRUCTURAL;
+    if(!status)status=ck_group_proof(&c);
+    memset(&visit,0,sizeof(visit));visit.c=&c;visit.group=group;visit.plan=entries;visit.plan_count=count;
+    if(!status) {
+        memset(c.duplicate,0,c.map_bytes);
+        if(!(group->flags&FF_CHECK_GROUP_IDENTITY))ck_group_chain(&c,group->seed_cluster,1);
+        if(c.error)status=c.error;
+        c.mode=CK_GROUP;c.visitor=ck_group_visit;c.visitor_context=&visit;
+        out->affected_files=0;
+        if(!status)status=ck_tree(&c);
+    }
+    for(i=0;!status && i<count;i++) {
+        for(j=0;j<i;j++)if(entries[j].parent_cluster==entries[i].parent_cluster && entries[j].entry_offset==entries[i].entry_offset)status=FF_CHECK_STRUCTURAL;
+        if(!status && !visit.parents[i])status=FF_CHECK_STRUCTURAL;
+        if(!status)status=ck_plan_entry(&c,&entries[i],&dir,&present);
+        if(!status && (present?!visit.seen[i]:!resume))status=FF_CHECK_STRUCTURAL;
+    }
+    if(!status && !commit(FF_CHECK_GROUP_PENDING,context))status=FF_CHECK_IO;
+    for(i=0;!status && i<count;i++) {
+        status=ck_plan_entry(&c,&entries[i],&dir,&present);
+        if(!status)status=ck_detach(&c,&entries[i]);
+    }
+    if(!status) {
+        FRESULT res=sync_fs(fs);
+        if(res!=FR_OK)status=ck_io(&c,res);
+    }
+    fs->winsect=(DWORD)0-1U;
+    for(i=0;!status && i<count;i++) {
+        status=ck_plan_entry(&c,&entries[i],&dir,&present);
+        if(!status && present)status=ck_io(&c,FR_DISK_ERR);
+        DWORD offset=entries[i].lfn_offset;
+        for(;!status && offset!=CK_NONE && offset<entries[i].entry_offset;offset+=32) {
+            FF_DIR part;FRESULT res;
+            memset(&part,0,sizeof(part));part.obj.fs=fs;part.obj.id=fs->id;part.obj.sclust=entries[i].parent_cluster;
+            res=dir_sdi(&part,offset);if(res==FR_OK)res=move_window(fs,part.sect);
+            if(res!=FR_OK)status=ck_io(&c,res);
+            else if(fs->win[part.dptr%SS(fs)]!=DDEM)status=ck_io(&c,FR_DISK_ERR);
+        }
+    }
+    if(!status){out->complete=1;out->batch_files=count;}
+    ck_release(&c);ck_unlock(fs);return status;
+}
+
+
+static void ck_repair_reset(CK_CTX *c)
+{
+    ff_check_geometry geometry=c->out->geometry;
+    memset(c->out,0,sizeof(*c->out));c->out->geometry=geometry;
+    memset(c->owned,0,c->map_bytes*3U);
+    c->error=c->unsafe=c->foreign=c->directory_uncertain=0;
+    c->cache_sector=CK_NONE;c->mode=CK_SCAN;
+    c->fs->winsect=(DWORD)0-1U;
+}
+static BYTE ck_mirror_mask(CK_CTX *c,DWORD offset)
+{
+    DWORD skip=c->fs->fs_type==FS_FAT12?3U:c->fs->fs_type==FS_FAT16?4U:8U;
+    if(offset<skip || offset>=c->used_fat_bytes)return 0;
+    if(c->fs->fs_type==FS_FAT32 && (offset&3U)==3U)return 0x0f;
+    if(c->fs->fs_type==FS_FAT12 && (c->fs->n_fatent&1U) && offset+1U==c->used_fat_bytes)return 0x0f;
+    return 0xff;
+}
+/* Reuse one workspace sequentially. Directory traversal itself must use the
+ * candidate FAT too; changing only the checker's cache would not prove it. */
+static int ck_mirror_candidate(CK_CTX *c,UINT copy,int *valid)
+{
+    DWORD base=c->fs->fatbase;
+    int status;
+    *valid=0;ck_repair_reset(c);c->fs->fatbase=base+copy*c->fs->fsize;
+    status=ck_tree(c);
+    /* Reference topology must be entirely sound. Only after that proof can
+     * all_fat's unowned orphan/invalid entries be deferred to reclamation;
+     * they do not make a usable reference FAT ambiguous by themselves. */
+    int references_ok=!status && !c->out->damage_flags && !c->directory_uncertain;
+    if(references_ok)status=ck_all_fat(c,0);
+    if(!status)*valid=references_ok &&
+        !(c->out->damage_flags&~(FF_CHECK_ORPHAN|FF_CHECK_INVALID_LINK));
+    DWORD fs_error=c->out->fs_error;
+    c->fs->fatbase=base;ck_repair_reset(c);
+    if(status){c->error=status;c->out->fs_error=fs_error;}
+    return status;
+}
+static int ck_mirror_trust(CK_CTX *c,int *trusted)
+{
+    int valid[2]={0,0},status=0;
+    *trusted=-1;
+    if(!c->mirror_enabled)return 0;
+    for(UINT copy=0;copy<2 && !status;copy++)status=ck_mirror_candidate(c,copy,&valid[copy]);
+    if(!status && valid[0]!=valid[1])*trusted=valid[0]?0:1;
+    return status;
+}
+static int ck_mirror_propose(CK_CTX *c,ff_check_patch *patch,int trusted)
+{
+    int status=0,valid=0;
+    if(trusted<0)status=ck_mirror_trust(c,&trusted);
+    else {
+        status=ck_mirror_candidate(c,(UINT)trusted,&valid);
+        if(!status && !valid)trusted=-1;
+    }
+    if(status || trusted<0)return status;
+    for(DWORD sector=0;sector<c->used_fat_sectors;sector++) {
+        int changed=0;
+        if(disk_read(c->fs->pdrv,c->cache,c->fs->fatbase+trusted*c->fs->fsize+sector,1)!=RES_OK ||
+                disk_read(c->fs->pdrv,c->scratch,c->fs->fatbase+(1-trusted)*c->fs->fsize+sector,1)!=RES_OK)
+            return ck_io(c,FR_DISK_ERR);
+        for(UINT i=0;i<SS(c->fs);i++) {
+            BYTE mask=ck_mirror_mask(c,sector*SS(c->fs)+i);
+            if((c->cache[i]&mask)!=(c->scratch[i]&mask)){changed=1;break;}
+        }
+        if(!changed)continue;
+        memset(patch,0,sizeof(*patch));patch->geometry=c->out->geometry;
+        patch->kind=FF_CHECK_PATCH_MIRROR;patch->source_fat=(uint32_t)trusted;patch->fat_sector=sector;
+        memcpy(patch->before,c->scratch,SS(c->fs));
+        for(UINT i=0;i<SS(c->fs);i++) {
+            BYTE mask=ck_mirror_mask(c,sector*SS(c->fs)+i);
+            patch->after[i]=(BYTE)((patch->before[i]&~mask)|(c->cache[i]&mask));
+        }
+        return 0;
+    }
+    return 0;
+}
+static int ck_patch_directory_trusted(CK_CTX *c,const ff_check_patch *patch)
+{
+    DWORD parent=patch->parent_cluster;
+    if(!parent && c->fs->fs_type==FS_FAT32)parent=c->fs->dirbase;
+    if(ck_group_chain(c,parent,0))return 0;
+    if((patch->identity[DIR_Attr]&AM_DIR) && patch->after[patch->entry_offset%SS(c->fs)]!=DDEM &&
+            !(patch->identity[0]=='.' && (patch->entry_offset==0 || patch->entry_offset==32))) {
+        if(ck_group_chain(c,ld_clust(c->fs,patch->identity),0))return 0;
+    }
+    return !c->error;
+}
+int f_check_repair_next(const char *drive,ff_check_result *out,ff_check_patch *patch,
+    ff_check_progress progress,void *context)
+{
+    FATFS *fs=0;CK_CTX c;int status;
+    if(!out || !patch)return FF_CHECK_UNSUPPORTED;
+    memset(out,0,sizeof(*out));status=ck_open(drive,&fs);
+    if(status){if(fs)ck_unlock(fs);return status;}
+    status=ck_setup(&c,fs,out,0);
+    if(!status && (ff_check_write_allowed(fs->pdrv)||ck_any_open(fs)))status=FF_CHECK_BUSY;
+    if(!status && SS(fs)>FF_CHECK_PATCH_MAX)status=FF_CHECK_UNSUPPORTED;
+    if(!status)status=ck_geometry(&c);
+    int trusted=-1;
+    if(!status && patch->kind==FF_CHECK_PATCH_MIRROR) {
+        if(memcmp(&out->geometry,&patch->geometry,sizeof(patch->geometry)) ||
+                !c.mirror_enabled || patch->source_fat>1 || patch->fat_sector>=c.used_fat_sectors)
+            status=FF_CHECK_STRUCTURAL;
+        else {
+            DWORD base=fs->fatbase+patch->fat_sector;
+            if(disk_read(fs->pdrv,c.scratch,base+(1U-patch->source_fat)*fs->fsize,1)!=RES_OK ||
+                    disk_read(fs->pdrv,c.cache,base+patch->source_fat*fs->fsize,1)!=RES_OK)status=ck_io(&c,FR_DISK_ERR);
+            if(!status && memcmp(c.scratch,patch->after,SS(fs)))status=FF_CHECK_STRUCTURAL;
+            for(UINT i=0;!status && i<SS(fs);i++) {
+                BYTE mask=ck_mirror_mask(&c,patch->fat_sector*SS(fs)+i);
+                if((c.cache[i]&mask)!=(patch->after[i]&mask))status=FF_CHECK_STRUCTURAL;
+            }
+            if(!status)trusted=(int)patch->source_fat;
+            c.cache_sector=CK_NONE;
+        }
+    }
+    memset(patch,0,sizeof(*patch));
+    c.progress=progress;c.context=context;
+    if(!status)status=ck_mirrors(&c);
+    if(!status && (out->damage_flags&FF_CHECK_MIRROR))status=ck_mirror_propose(&c,patch,trusted);
+    else if(!status) {
+        c.mode=CK_SCAN;c.repair_scan=1;c.patch=patch;
+        status=ck_tree(&c);
+        if(!status && patch->kind && !ck_patch_directory_trusted(&c,patch)) {
+            if(c.error)status=c.error;
+            patch->kind=0;
+        }
+        if(c.directory_uncertain)patch->kind=0;
+    }
+    if(!status){out->complete=1;status=patch->kind?FF_CHECK_STRUCTURAL:FF_CHECK_CLEAN;}
+    ck_release(&c);ck_unlock(fs);return status;
+}
+static int ck_patch_address(CK_CTX *c,const ff_check_patch *patch,DWORD *address)
+{
+    if(patch->kind==FF_CHECK_PATCH_MIRROR) {
+        if(!c->mirror_enabled || patch->source_fat>1 || patch->fat_sector>=c->used_fat_sectors)return FF_CHECK_STRUCTURAL;
+        *address=c->fs->fatbase+(1U-patch->source_fat)*c->fs->fsize+patch->fat_sector;
+        return 0;
+    }
+    if(patch->kind==FF_CHECK_PATCH_DIRECTORY) {
+        FF_DIR dir;FRESULT res;
+        if(patch->entry_offset&31U)return FF_CHECK_STRUCTURAL;
+        memset(&dir,0,sizeof(dir));dir.obj.fs=c->fs;dir.obj.id=c->fs->id;dir.obj.sclust=patch->parent_cluster;
+        res=dir_sdi(&dir,patch->entry_offset);if(res!=FR_OK)return ck_io(c,res);
+        *address=dir.sect;return 0;
+    }
+    return FF_CHECK_STRUCTURAL;
+}
+int f_check_repair_apply(const char *drive,const ff_check_patch *patch,int resume,
+    ff_check_result *out,ff_check_commit commit,void *context)
+{
+    FATFS *fs=0;CK_CTX c;DWORD address=0;int status,already=0;
+    if(!patch || !out || !commit)return FF_CHECK_UNSUPPORTED;
+    memset(out,0,sizeof(*out));status=ck_open(drive,&fs);
+    if(status){if(fs)ck_unlock(fs);return status;}
+    status=ck_setup(&c,fs,out,0);
+    if(!status && (ff_check_write_allowed(fs->pdrv)||ck_any_open(fs)))status=FF_CHECK_BUSY;
+    if(!status && SS(fs)>FF_CHECK_PATCH_MAX)status=FF_CHECK_UNSUPPORTED;
+    if(!status)status=ck_geometry(&c);
+    if(!status && memcmp(&out->geometry,&patch->geometry,sizeof(patch->geometry)))status=FF_CHECK_STRUCTURAL;
+    if(!status)status=ck_patch_address(&c,patch,&address);
+    if(!status && disk_read(fs->pdrv,c.scratch,address,1)!=RES_OK)status=ck_io(&c,FR_DISK_ERR);
+    if(!status) {
+        already=!memcmp(c.scratch,patch->after,SS(fs));
+        if(already && !resume)status=FF_CHECK_STRUCTURAL;
+        for(UINT i=0;!status && i<SS(fs);i++)
+            if(c.scratch[i]!=patch->before[i] && (!resume || c.scratch[i]!=patch->after[i]))status=FF_CHECK_STRUCTURAL;
+    }
+    if(!status && !already && patch->kind==FF_CHECK_PATCH_DIRECTORY) {
+        UINT position=patch->entry_offset%SS(fs);
+        if(memcmp(patch->before+position,patch->identity,32))status=FF_CHECK_STRUCTURAL;
+        for(UINT i=0;!status && i<SS(fs);i++)
+            if((i<position || i>=position+32U) && patch->before[i]!=patch->after[i])status=FF_CHECK_STRUCTURAL;
+        if(!status) {
+            c.repair_scan=1;c.verify_patch=patch;c.mode=CK_SCAN;
+            status=ck_mirrors(&c);
+            if(!status && (out->damage_flags&FF_CHECK_MIRROR))status=FF_CHECK_STRUCTURAL;
+            if(!status)status=ck_tree(&c);
+            if(!status && (!c.patch_verified || c.directory_uncertain || !ck_patch_directory_trusted(&c,patch)))
+                status=c.error?c.error:FF_CHECK_STRUCTURAL;
+        }
+    } else if(!status && !already && patch->kind==FF_CHECK_PATCH_MIRROR) {
+        int valid;
+        /* Source authority was established by repair_next and persisted with
+         * this patch. It must remain valid, but the partially repaired peer
+         * may now be viable too; never choose a different source mid-replay. */
+        status=ck_mirror_candidate(&c,patch->source_fat,&valid);
+        if(!status && !valid)status=FF_CHECK_STRUCTURAL;
+        if(!status && disk_read(fs->pdrv,c.cache,fs->fatbase+patch->source_fat*fs->fsize+patch->fat_sector,1)!=RES_OK)
+            status=ck_io(&c,FR_DISK_ERR);
+        for(UINT i=0;!status && i<SS(fs);i++) {
+            BYTE mask=ck_mirror_mask(&c,patch->fat_sector*SS(fs)+i);
+            if(patch->after[i]!=(BYTE)((patch->before[i]&~mask)|(c.cache[i]&mask)))status=FF_CHECK_STRUCTURAL;
+        }
+    }
+    if(!status && !commit(FF_CHECK_PATCH_PENDING,context))status=FF_CHECK_IO;
+    if(!status && !already) {
+        memcpy(c.scratch,patch->after,SS(fs));
+        if(disk_write(fs->pdrv,c.scratch,address,1)!=RES_OK)status=ck_io(&c,FR_DISK_ERR);
+        fs->winsect=(DWORD)0-1U;
+        if(patch->kind==FF_CHECK_PATCH_MIRROR){fs->free_clst=fs->last_clst=0xffffffffU;}
+    }
+    if(!status && disk_ioctl(fs->pdrv,CTRL_SYNC,0)!=RES_OK)status=ck_io(&c,FR_DISK_ERR);
+    if(!status && (disk_read(fs->pdrv,c.scratch,address,1)!=RES_OK ||
+            memcmp(c.scratch,patch->after,SS(fs))))status=ck_io(&c,FR_DISK_ERR);
+    if(!status)out->complete=1;
+    ck_release(&c);ck_unlock(fs);return status;
 }
